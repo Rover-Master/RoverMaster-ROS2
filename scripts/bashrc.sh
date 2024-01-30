@@ -30,9 +30,19 @@ function launch() {
     elif [ -f launch/$1.yaml ]; then
         ros2 launch launch/$1.yaml
     else
+        echo "========================"
+        if [ -z "$1" ]; then
+            echo "Usage: launch <file>"
+            echo "========================"
+        else
+            echo "File not found: $1"
+            echo "========================"
+        fi
+        echo "Available launch files:"
         for file in launch/*; do
-            echo $(basename $file)
+            echo "- $(basename $file)"
         done
+        echo
     fi
 }
 # Add completion for launch function
