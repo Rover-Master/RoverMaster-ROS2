@@ -19,7 +19,7 @@ find_package(image_transport REQUIRED)
 find_package(OpenCV REQUIRED)
 include_directories(include)
 
-set(LIBS)
+# set(LIBS)
 # install(TARGETS ${LIBS}
 #     ARCHIVE DESTINATION lib
 #     LIBRARY DESTINATION lib
