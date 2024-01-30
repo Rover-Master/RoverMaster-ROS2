@@ -1,0 +1,6 @@
+# This is the git ignore file for ROS2 workspace
+# Author: Yuxuan Zhang
+build
+install
+log
+compile_commands.json
