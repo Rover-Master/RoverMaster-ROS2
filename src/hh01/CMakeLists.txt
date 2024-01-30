@@ -8,19 +8,39 @@ endif()
 
 # find dependencies
 find_package(ament_cmake REQUIRED)
+# ROS2 packages
+find_package(rclcpp REQUIRED)
+find_package(std_msgs REQUIRED)
+find_package(sensor_msgs REQUIRED)
+find_package(cv_bridge REQUIRED)
+find_package(image_transport REQUIRED)
 # uncomment the following section in order to fill in
 # further dependencies manually.
 find_package(OpenCV REQUIRED)
+include_directories(include)
 
-add_executable(subscriber src/subscriber.cpp)
-target_include_directories(subscriber PUBLIC
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-  $<INSTALL_INTERFACE:include>
-  ${OpenCV_INCLUDE_DIRS}
-)
-target_compile_features(subscriber PUBLIC c_std_99 cxx_std_17)  # Require C99 and C++17
+set(LIBS)
+# install(TARGETS ${LIBS}
+#     ARCHIVE DESTINATION lib
+#     LIBRARY DESTINATION lib
+#     RUNTIME DESTINATION bin
+# )
 
-install(TARGETS subscriber
+set(NODES main)
+
+foreach(NODE ${NODES})
+  add_executable(${NODE} src/${NODE}.cpp)
+  ament_target_dependencies(${NODE}
+    rclcpp
+    std_msgs
+    sensor_msgs
+    cv_bridge
+    image_transport
+    OpenCV
+  )
+endforeach()
+
+install(TARGETS ${NODES}
   DESTINATION lib/${PROJECT_NAME}
 )
 

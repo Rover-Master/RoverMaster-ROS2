@@ -1,6 +1,11 @@
 # This is the git ignore file for ROS2 workspace
 # Author: Yuxuan Zhang
+
+# ROS2 Workspace Produced Files
 build
 install
 log
+
+# Auto Generated Clangd Helper
 compile_commands.json
+.cache

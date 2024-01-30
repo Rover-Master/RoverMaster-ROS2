@@ -4,11 +4,18 @@ SHELL:=/bin/bash
 ROS_DISTRO?=iron
 
 build: build/deps
-	colcon build --symlink-install
+	CMAKE_EXPORT_COMPILE_COMMANDS=1 colcon build --symlink-install
 	@scripts/compile_commands.py
 
-run: build nodes.list
-	bash scripts/run.sh
+launch/%.xml: build
+	@echo
+	@echo "=================================================="
+	@echo "Launching $@"
+	@echo "=================================================="
+	@source install/setup.bash && ros2 launch $@
+
+shell: build
+	source install/setup.bash && bash
 
 build/deps:
 	@mkdir -p build
@@ -18,4 +25,5 @@ build/deps:
 clean:
 	rm -rf build install
 
-.PHONY: build run clean
+.PHONY: build run clean launch/%.xml shell
+ 
