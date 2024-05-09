@@ -14,9 +14,11 @@ else
     read -n 1 -s -r -p "Press any key to exit..."
     exit 1;
 fi
+# Command to find PWD
+CMD_PWD='$('"pwd | sed 's@^${PWD}\?@.@'"')'
 # Rewrite the PS1 prompt to highlight current ROS2 environment
-export WS=$(pwd)
-export PS1="\033[01;32mROS2::$(basename $WS)\[\033[00m\] \[\033[01;34m\]\w\[\033[00m\]\$ "
+export WS=$PWD
+export PS1="\033[01;32mROS2::$(basename $WS)\[\033[00m\] \[\033[01;34m\]${CMD_PWD}\[\033[00m\] \$ "
 # Function to launch ROS2 manifests in ./launch/
 function launch() {
     if [ -f launch/$1 ]; then

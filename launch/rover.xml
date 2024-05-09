@@ -1,0 +1,13 @@
+<launch>
+  <node pkg="rover_driver" exec="base" namespace="rover"/>
+  <node pkg="rover_driver" exec="platform" namespace="rover"/>
+  <!-- <node pkg="vision" exec="detector" namespace="rover"/> -->
+  <node pkg="socket_agent" exec="agent">
+    <remap from="vel/get" to="/rover/base/velocity/get"/>
+    <remap from="vel/set" to="/rover/base/velocity/set"/>
+    <remap from="platform/pos/get" to="/rover/platform/attitude/get"/>
+    <remap from="platform/pos/set" to="/rover/platform/attitude/set"/>
+    <remap from="imu/acc" to="/rover/base/imu/acc"/>
+    <remap from="imu/att" to="/rover/base/imu/att"/>
+  </node>
+</launch>

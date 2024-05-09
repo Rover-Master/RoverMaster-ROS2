@@ -6,9 +6,15 @@ build
 install
 log
 
+# IDE
+.vscode
+
 # Auto Generated Clangd Helper
 compile_commands.json
 .cache
 
 # Python Runtime Cache
 __pycache__
+
+# Unix Sockets
+*.socket
