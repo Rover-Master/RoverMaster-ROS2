@@ -1,1 +1,3 @@
-# AuRo Final Project
+# ROS2 Driver Stack for _RoverMaster_
+
+## Documentation coming soon ...
