@@ -1,28 +1,26 @@
 #!/usr/bin/env python3
 import time, math, cv2, numpy as np
+from typing import Callable
 from .transforms import X, Y, Z, rotate_around
 from .utils import radians, degrees
-
-
-use_dict(aruco.DICT_4X4_100)
-
-# Open camera
-ret, frame = video.read()
-h, w, _ = frame.shape
-mtx, dist, new_mtx = init_undistort((w, h))
-
 
 # ROS2 Related
 import rclpy
 from rclpy.node import Node
 from std_msgs.msg import Float64
-from geometry_msgs.msg import Twist
+from geometry_msgs.msg import Twist, Vector3
 
 
 class Position:
     x: float = 0 # X offset in millimeters
     y: float = 0 # Y offset in millimeters
     r: float = 0 # Heading in degrees, zero at north, range (-180, 180)
+
+    def __init__(self, x = 0, y = 0, r = 0):
+        self.x = x
+        self.y = y
+        self.r = r
+    
 
 
 class Velocity:
@@ -47,14 +45,14 @@ class Robot(Node):
     velocity = Velocity()
 
     # Planned velocities to be executed in an interval of 100Hz
-    motion: List[Velocity] = []
+    motion: list[Velocity] = []
 
     def update_attitude(self, next_attitude: Twist):
         """
         Handles the incoming attitude message, offsets the value according to initial heading.
         Adjusts the range from 0~360 to -180~180.
         """
-        if (self.heading_initialized):
+        if self.heading_initialized:
             # TODO Normal logic
             pass
         else:
@@ -80,7 +78,7 @@ class Robot(Node):
 
     def move_to(self, dst: Position):
         """
-        Calcuates a viable strategy to move from current position to the destination
+        Calculates a viable strategy to move from current position to the destination
         Both translation and heading need to be satisfied
         """
         # Convert the destination location from world coordinate to robot coordinate
@@ -94,9 +92,13 @@ class Robot(Node):
     def timed_velocity_update(self):
         if len(self.motion):
             next_velocity, self.motion = self.motion[0], self.motion[1:]
+            linear = Vector3(X=next_velocity.linear / 1000.0)
+            angular = Vector3(Z=next_velocity.angular / 360.0)
         else:
-            self.base_velocity.publish(Twist())
-            
+            linear = Vector3(X=0)
+            angular = Vector3(Z=0)
+        self.base_velocity.publish(Twist(linear=linear, angular=angular))
+
 
     def __init__(self):
         super().__init__("mission")
@@ -124,11 +126,24 @@ def main(args=None):
     robot = Robot()
     robot.wait(lambda _: robot.heading_initialized)
     # Initialize the arm
+    
     # First: Move & Turn to estimated initial position
-    robot.motion = [Velocity(linear = 1.0, angular = 0.5)]
-    node.destroy_node()
-    rclpy.shutdown()
-
+    robot.motion = [Velocity(linear = 100, angular = 90 / 5.0)] * 10000
+    robot.wait(lambda _: robot.position.r >= 0 or len(robot.motion) == 0)
+    # Move to each stop points
+    for x in [100, 120, 140, 160]:
+        robot.move_to(Position(x=x, y=0, r=0))
+        robot.wait(lambda _: len(robot.motion) == 0)
+        # Detect right side stem
+        offset_left: Position = robot.detect(Position(x=x, y=-120, r=0))
+        # Do labeling
+        # Do harvesting
+        # Same for right side
+        offset_right: Position = robot.detect(Position(x=x, y=120, r=0))
+        # Correct robot location
+        robot.position = (offset_left + offset_right) / 2
+    # Return to the stop location
+    # TODO
 
 if __name__ == "__main__":
     main()
