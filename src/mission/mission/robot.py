@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-import time, math, cv2, numpy as np
+import time, math, cv2, sys, numpy as np
 from typing import Callable
 from .transforms import X, Y, Z, rotate_around
 from .utils import radians, degrees
@@ -9,6 +9,11 @@ import rclpy
 from rclpy.node import Node
 from std_msgs.msg import Float64
 from geometry_msgs.msg import Twist, Vector3
+
+# Detection
+from model import NavAlignment, Detection
+from control import init, move
+import subprocess
 
 
 class Position:
@@ -46,6 +51,12 @@ class Robot(Node):
 
     # Planned velocities to be executed in an interval of 100Hz
     motion: list[Velocity] = []
+    
+    # Initiate detection
+    detection = Detection("")
+    
+    
+    
 
     def update_attitude(self, next_attitude: Twist):
         """
@@ -120,6 +131,43 @@ class Robot(Node):
             rclpy.spin_once(self)
             if condition():
                 return
+    
+    def collection(self):
+        # Initialize camera
+        #TODO check the index
+        cap = cv2.VideoCapture(0)
+        ret, frame = cap.read()
+        #TODO Do I need to save all images for mapping?
+        cap.release()
+        return frame
+
+    
+    def harvest(self):
+        # TODO Home position of the camera
+        camera_position = self.home()
+    
+        for J3 in range(0, 361, 45):
+            move(J1=90, J2=-2, J3=J3)
+            time.sleep(1) #TODO Config
+            frame = self.collection()
+            
+            # Do target detection
+            det_boxes = self.detection.process_image(frame)
+            # Get the closest plant to harverst
+            target_plant = self.detection.det_target(det_boxes, camera_position)
+            
+            # Harvest if not None and move j3 if is None
+            if target_plant is not None:
+                # Harvest
+                pass
+            else:
+                continue
+        
+        
+        
+        
+    
+    
 
 def main(args=None):
     rclpy.init(args=args)
@@ -127,17 +175,33 @@ def main(args=None):
     robot.wait(lambda _: robot.heading_initialized)
     # Initialize the arm
     
+    
+    
+    # Navigation alignment
+    navigation = NavAlignment("")
+    
+    
+    
     # First: Move & Turn to estimated initial position
     robot.motion = [Velocity(linear = 100, angular = 90 / 5.0)] * 10000
     robot.wait(lambda _: robot.position.r >= 0 or len(robot.motion) == 0)
     # Move to each stop points
-    for x in [100, 120, 140, 160]:
+    for x in [100, 120, 140, 160]: #TODO unit and measurement
         robot.move_to(Position(x=x, y=0, r=0))
         robot.wait(lambda _: len(robot.motion) == 0)
+        
+        
         # Detect right side stem
+        frame = robot.collection()
+        nav_box = navigation.process_image(frame)
+        x_box_nav, y_box_nav, w_box_nav, h_box_nav = nav_box
         offset_left: Position = robot.detect(Position(x=x, y=-120, r=0))
-        # Do labeling
-        # Do harvesting
+        
+        # Harvest
+        robot.harvest()
+        
+        # Mapping
+        
         # Same for right side
         offset_right: Position = robot.detect(Position(x=x, y=120, r=0))
         # Correct robot location
