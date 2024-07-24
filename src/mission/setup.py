@@ -5,7 +5,7 @@ warnings.filterwarnings("ignore", category=UserWarning)
 from setuptools import find_packages, setup
 
 
-package_name = "vision"
+package_name = "mission"
 
 setup(
     name=package_name,
@@ -24,7 +24,7 @@ setup(
     tests_require=["pytest"],
     entry_points={
         "console_scripts": [
-            "detector = vision.detector:main",
+            "detector = mission.controller:main",
         ],
     },
 )

@@ -177,6 +177,20 @@ public:
       serial_out();
     });
   }
+on the number of items that can be placed in the queue. Insertion will block once this size has been reached, until queue items are consumed. If maxsize is less than or equal to zero, the queue size is infinite.
+
+The lowest valued entries are retrieved first (the lowest valued entry is the one that would be returned by min(entries)). A typical pattern for entries is a tuple in the form: (priority_number, data).
+
+If the data elements are not comparable, the data can be wrapped in a class that ignores the data item and only compares the priority number:
+
+from dataclasses import dataclass, field
+from typing import Any
+
+@dataclass(order=True)
+class PrioritizedItem:
+    priority: int
+    item: Any=field(compare=False)
+
 
   ~BaseDriver() {
     RCLCPP_INFO(get_logger(), "Stopping all motors");
