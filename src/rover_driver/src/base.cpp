@@ -18,16 +18,18 @@ static const double V[4][3] = {
     // Motor Layout (UP is forward)
     // 4 2
     // 3 1
-    {1, -1, -1},
-    {1, 1, -1},
-    {1, 1, 1},
-    {1, -1, 1}};
+    {1, 0, -1},
+    {1, 0, -1},
+    {1, 0, 1},
+    {1, 0, 1}};
 
-static const double max_velocity = 50.0;
+#define DSHOT_NEUTRAL 1500
+#define MAX_VELOCITY 100
+static const double max_velocity = MAX_VELOCITY;
 // Single wheel can top to 2 times of the maximum velocity
 // This ensures the base can do same translation speed in 360 degrees
-static const double comb_limit = 2.0;
-#define DSHOT_NEUTRAL 1500
+#define COMB_LIMIT 2
+static const double comb_limit = COMB_LIMIT;
 
 class BaseDriver : public rclcpp::Node {
 private:
@@ -74,8 +76,9 @@ private:
       clamp(cmd_vel, DSHOT_NEUTRAL - max_velocity * comb_limit,
             DSHOT_NEUTRAL + max_velocity * comb_limit);
       motor[i] = round(cmd_vel);
-      // Sanity check
-      ASSERT((motor[i] >= 1400) && (motor[i] <= 1600),
+      // // Sanity check
+      ASSERT((motor[i] >= (DSHOT_NEUTRAL - COMB_LIMIT * MAX_VELOCITY)) &&
+                 (motor[i] <= (DSHOT_NEUTRAL + COMB_LIMIT * MAX_VELOCITY)),
              "Motor " + std::to_string(i) +
                  " abnormal value: " + std::to_string(motor[i]));
     }
