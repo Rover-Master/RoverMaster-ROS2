@@ -57,8 +57,36 @@ class Robot(Node):
     # Navigation alignment
     navigation = NavAlignment("")
     
+    #logger of mapped leaves
+    logger = []
     
     
+    def write_solution_file(self):
+        # Generate Plant Numbers
+        plant_numbers = [f"Plant {letter}{number}" for letter in 'AB' for number in range(1, 13)]
+
+        # Initial file writing
+        with open("Initial_Mapping_ABE_Gator", 'w') as file:
+            # Write header
+            file.write("Plant Number Healthy Unhealthy Stems Flower\n")
+            
+            for entry in self.logger:
+                    file.write(f"{plant_numbers[i]} {entry['Healthy']} {entry['Unhealthy']} {entry['Flower']}\n")
+            file.close()
+            
+        
+        # Final file writing
+        with open("Final_Mapping_ABE_Gator", 'w') as file:
+            # Write header
+            file.write("Plant Number Healthy Unhealthy Stems Flower\n")
+            
+            for entry,i in zip(self.logger,range(24)):
+                flowers = 0
+                if entry["Flower"] >= 1:
+                    flowers = 1
+                    file.write(f"{plant_numbers[i]} {entry['Healthy']} {0} {flowers}\n")
+            file.close()
+            
 
     def update_attitude(self, next_attitude: Twist):
         """
@@ -143,22 +171,32 @@ class Robot(Node):
         cap.release()
         return frame
 
+    def update_arm_camera_position(acc_angle:float, stemp_center:Position) -> Position:
+    #TODO test logic
+    #assuming home is 0,0 and starting pos of camera
+    #assume dis is distance to stemp center on x? plane
+        dis = 5 #TODO: when robot is center distance should be measurable and a constant
+        x = dis*math.cos(radians(acc_angle)) + stemp_center.x
+        y = dis*math.sin(radians(acc_angle)) + stemp_center.y
+        return Position(x=x, y=y, r=0)
     
-    def harvest(self):
+    
+    def harvest(self, stemp_center):
         #drive to HOME
         move(J1=90, J2=-2, J3=J3) 
         #init camera position as (0,0)
-        camera_position = Position 
-        camera_position.x = 0
-        camera_position.y = 0
-
+        camera_position = Position(x=0, y=0,r=0)
+        
         #rotate around stemp, do 8 stops
         for J3 in range(0, 361, 45):
             #take picture
             frame = self.collection() 
             # Determine all bboxes of images in frame (only unhealthy, flowers)
             det_boxes = self.detection.process_image(frame)
-            # Get the closest plant to harverst
+            
+            # Update camera position
+            camera_position = self.update_arm_camera_position(J3, stemp_center)
+            # Get closest target
             target_plant = self.detection.get_closest_target(det_boxes, camera_position)
             time.sleep(1) #TODO Determine if necessary, and how long 
 
@@ -182,7 +220,7 @@ class Robot(Node):
                 move(endeffector=0) 
                 while is_moving(endeffector):
                     pass 
-          
+    
 
 def main(args=None):
     rclpy.init(args=args)
@@ -192,6 +230,10 @@ def main(args=None):
     # TODO: Initialize the arm
 
     #TODO figure out in which corner we started! -> determine origin position
+    #idea: move arm to home position and check similarilz to detecting a stemp, if there is one
+    #if it is -> we are starting on the B position
+    #if not -> we are starting on the A position (or messed up our scan)
+    
     # First: Move & Turn to estimated initial position
     robot.motion = [Velocity(linear = 100, angular = 90 / 5.0)] * 10000
     robot.wait(lambda _: robot.position.r >= 0 or len(robot.motion) == 0)
@@ -201,14 +243,16 @@ def main(args=None):
         robot.wait(lambda _: len(robot.motion) == 0)
         
         
-        # Detect right side stem
+        # Detect right side stem/find center
         frame = robot.collection()
         nav_box = robot.navigation.process_image(frame)
         x_box_nav, y_box_nav, w_box_nav, h_box_nav = nav_box
         offset_left: Position = robot.detect(Position(x=x, y=-120, r=0))
         
+        
+        
         # Harvest
-        robot.harvest()
+        robot.harvest(Position(x=x_box_nav, y=y_box_nav, r=0)) 
         
         # Mapping
         #TODO Make an association between specific plant and its corresponding mapping please!
@@ -217,8 +261,8 @@ def main(args=None):
         offset_right: Position = robot.detect(Position(x=x, y=120, r=0))
         # Correct robot location
         robot.position = (offset_left + offset_right) / 2
-    # Return to the stop location
-    # TODO
+    
+    # Rotate 180 degrees
 
     # ROW B harvesting: Move to each stop points 
     for x in [160, 140, 120, 100]: #TODO unit and measurement
@@ -226,6 +270,10 @@ def main(args=None):
 
     # Return to the stop location
     # TODO
+    
+    #write file and move to usb
+    robot.write_solution_file()
+    #TODO move file to USB stick
 
 if __name__ == "__main__":
     main()

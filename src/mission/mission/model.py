@@ -11,9 +11,8 @@ from control import init, move
 
 # Inference Nav
 class NavAlignment():
-    def __init__(self, model_path, image_dir, output_dir):
+    def __init__(self, model_path, output_dir):
         self.model_path = model_path
-        self.image_dir = image_dir
         self.output_dir = output_dir
         self.model = YOLO(self.model_path)  # Load model once in the constructor
 
@@ -106,6 +105,7 @@ def parse_args():
     parser = argparse.ArgumentParser(description = "Run YOLO model using the pretrained weights for detection")
     parser.add_argument('--model_path_nav', type=str, default= '/home/zahra/Documents/Robotics/perception/detection/yolov8n/runs/detect/trained_stem/weights/best.pt', help='Path to pretrained YOLO model on stem class')
     parser.add_argument('--model_path_det', type=str, default= '/home/zahra/Documents/Robotics/perception/detection/yolov8n/runs/detect/trained_leaf_flower/weights/best.pt', help='Path to pretrained YOLO model on flower and unhealthy leaves classes')
+    parser.add_argument('--model_path_map', type=str, default= '/home/zahra/Documents/Robotics/perception/detection/yolov8n/runs/detect/trained_leaf_flower/weights/best.pt', help='Path to pretrained YOLO model for mapping')
     return parser.parse_args()
 
 
