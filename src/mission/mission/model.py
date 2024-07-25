@@ -4,21 +4,15 @@ from ultralytics import YOLO
 import argparse, os, torch, time, subprocess
 from PIL import Image  
 import numpy as np
-from control import init, move
 
 
 
 
 # Inference Nav
 class NavAlignment():
-    def __init__(self, model_path, output_dir):
+    def __init__(self, model_path):
         self.model_path = model_path
-        self.output_dir = output_dir
-        self.model = YOLO(self.model_path)  # Load model once in the constructor
-
-    def save_images(self, frame):
-        os.makedirs(self.output_dir, exist_ok=True)
-        self.process_image(frame)
+        self.model = YOLO(self.model_path) 
 
     def process_image(self, image):
         results = self.model(image)
@@ -44,26 +38,13 @@ class NavAlignment():
 
         # summary = ", ".join(f"{count} {self.model.names[class_id]}" for class_id, count in class_counts.items()) # 2 Flowers, 2 Healthys, 1 Stem_Top, 3 Unhealthys
         return class_counts # 0:Flower, 1:Healthy, 2:Stem_Top, 3:Unhealthy #Format: {0: 2, 3: 3, 1: 2, 2: 1}
-    def save_detection_results(self, filtered_results, image_name, img_width, img_height):
-        save_path = os.path.join(self.output_dir, image_name.replace('.png', '.txt'))
-        with open(save_path, 'w') as file:
-            for box in filtered_results:
-                x_center, y_center, width, height = box[0], box[1], box[2], box[3]
-                file.write(f"{x_center:.6f} {y_center:.6f} {width:.6f} {height:.6f}\n")
-        print(f"Saved {image_name} to {save_path}")
-
 
 # Inference Detection
 class Detection():
-    def __init__(self, model_path, output_dir):
+    def __init__(self, model_path):
         self.model_path = model_path
-        self.output_dir = output_dir
-        self.model = YOLO(self.model_path)  # Load model once in the constructor
-
-    def process_images(self, image):
-        os.makedirs(self.output_dir, exist_ok=True)
-        self.process_image(image)
-
+        self.model = YOLO(self.model_path)  
+    
     def process_image(self, image):
         # image_path = os.path.join(self.image_dir, image_name)
         results = self.model(image)
@@ -91,29 +72,6 @@ class Detection():
                 return min(dis_list)
         else:
             return None
-
-    def save_detection_results(self, filtered_results, image_name, img_width, img_height):
-        save_path = os.path.join(self.output_dir, image_name.replace('.png', '.txt'))
-        with open(save_path, 'w') as file:
-            for box in filtered_results:
-                x_center, y_center, width, height = box[0], box[1], box[2], box[3]
-                file.write(f"{x_center:.6f} {y_center:.6f} {width:.6f} {height:.6f}\n")
-        print(f"Saved {image_name} to {save_path}")
-
-#TODO Update the models + location
-def parse_args():
-    parser = argparse.ArgumentParser(description = "Run YOLO model using the pretrained weights for detection")
-    parser.add_argument('--model_path_nav', type=str, default= '/home/zahra/Documents/Robotics/perception/detection/yolov8n/runs/detect/trained_stem/weights/best.pt', help='Path to pretrained YOLO model on stem class')
-    parser.add_argument('--model_path_det', type=str, default= '/home/zahra/Documents/Robotics/perception/detection/yolov8n/runs/detect/trained_leaf_flower/weights/best.pt', help='Path to pretrained YOLO model on flower and unhealthy leaves classes')
-    parser.add_argument('--model_path_map', type=str, default= '/home/zahra/Documents/Robotics/perception/detection/yolov8n/runs/detect/trained_leaf_flower/weights/best.pt', help='Path to pretrained YOLO model for mapping')
-    return parser.parse_args()
-
-
-args = parse_args()
-navigation = NavAlignment(args.model_path_nav, args.image_dir, args.output_dir_nav)
-detection = Detection(args.model_path_det, args.image_dir, args.output_dir_det)
-# navigation.process_images()
-detection.process_images()
 
 
     
