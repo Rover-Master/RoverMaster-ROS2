@@ -86,7 +86,7 @@ class Detection():
             dis_list = []
             for x_det in box_det:
                 x_b, y_b, w_b, h_b = x_det.detach().cpu().numpy()
-                distance = ((x_cam - x_b), (y_cam - y_b))
+                distance = abs(((x_cam - x_b), (y_cam - y_b)))
                 dis_list.append(distance)
                 return min(dis_list)
         else:
