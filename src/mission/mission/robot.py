@@ -162,14 +162,34 @@ class Robot(Node):
             if condition():
                 return
     
-    def collection(self):
+    def collection():
         # Initialize camera
-        #TODO check the index
-        cap = cv2.VideoCapture(0)
-        ret, frame = cap.read()
-        #TODO Do I need to save all images for mapping?
-        cap.release()
-        return frame
+        cap = cv2.VideoCapture(0)  # Ensure the camera index corresponds to the correct camera
+
+        if not cap.isOpened():
+            print("Error: Camera could not be accessed.")
+            return None
+
+        try:
+            # Attempt to capture a single frame
+            ret, frame = cap.read()
+            if not ret:
+                print("Error: Failed to capture image.")
+                return None
+
+            # Optionally save the image if needed for further processing
+            # cv2.imwrite('path_to_save_image.jpg', frame)
+
+            # Display the frame if you want to visually confirm capture (optional)
+            # cv2.imshow('Captured Image', frame)
+            # cv2.waitKey(0)  # Wait for key press to close the window
+            # cv2.destroyAllWindows()
+
+            return frame
+
+        finally:
+            # Ensure resources are released properly
+            cap.release()
 
     def update_arm_camera_position(acc_angle:float, stemp_center:Position) -> Position:
     #TODO test logic
