@@ -12,7 +12,7 @@ from geometry_msgs.msg import Twist, Vector3
 
 # Detection
 from model import NavAlignment, Detection
-from control import init, move
+from control import init, move, is_moving
 import subprocess
 
 
@@ -26,8 +26,6 @@ class Position:
         self.y = y
         self.r = r
     
-
-
 class Velocity:
     linear: float = 0 # Forward/Backward transitional velocity in mm/s
     angular: float = 0 # Rotational velocity in deg/s
@@ -54,6 +52,10 @@ class Robot(Node):
     
     # Initiate detection
     detection = Detection("")
+
+
+    # Navigation alignment
+    navigation = NavAlignment("")
     
     
     
@@ -143,49 +145,57 @@ class Robot(Node):
 
     
     def harvest(self):
-        # TODO Home position of the camera
-        camera_position = self.home()
-    
+        #drive to HOME
+        move(J1=90, J2=-2, J3=J3) 
+        #init camera position as (0,0)
+        camera_position = Position 
+        camera_position.x = 0
+        camera_position.y = 0
+
+        #rotate around stemp, do 8 stops
         for J3 in range(0, 361, 45):
-            move(J1=90, J2=-2, J3=J3)
-            time.sleep(1) #TODO Config
-            frame = self.collection()
-            
-            # Do target detection
+            #take picture
+            frame = self.collection() 
+            # Determine all bboxes of images in frame (only unhealthy, flowers)
             det_boxes = self.detection.process_image(frame)
             # Get the closest plant to harverst
-            target_plant = self.detection.det_target(det_boxes, camera_position)
-            
+            target_plant = self.detection.get_closest_target(det_boxes, camera_position)
+            time.sleep(1) #TODO Determine if necessary, and how long 
+
             # Harvest if not None and move j3 if is None
             if target_plant is not None:
-                # Harvest
-                pass
-            else:
-                continue
-        
-        
-        
-        
-    
-    
+                #TODO whats the value for each of these
+
+                #move to z = min height 
+                move(Z=lowest_point) 
+                while is_moving(Z):
+                    pass 
+                #move endeffector to trimming position (further inward)
+                move(endeffector=10)
+                while is_moving(endeffector):
+                    pass 
+                #move to z = max height
+                move(Z=heighest_point)
+                while is_moving(Z):
+                    pass 
+                # move endeffector back out (all the way to home of endeffector)
+                move(endeffector=0) 
+                while is_moving(endeffector):
+                    pass 
+          
 
 def main(args=None):
     rclpy.init(args=args)
     robot = Robot()
+    #Init the robot 
     robot.wait(lambda _: robot.heading_initialized)
-    # Initialize the arm
-    
-    
-    
-    # Navigation alignment
-    navigation = NavAlignment("")
-    
-    
-    
+    # TODO: Initialize the arm
+
+    #TODO figure out in which corner we started! -> determine origin position
     # First: Move & Turn to estimated initial position
     robot.motion = [Velocity(linear = 100, angular = 90 / 5.0)] * 10000
     robot.wait(lambda _: robot.position.r >= 0 or len(robot.motion) == 0)
-    # Move to each stop points
+    # ROW A harvesting: Move to each stop points 
     for x in [100, 120, 140, 160]: #TODO unit and measurement
         robot.move_to(Position(x=x, y=0, r=0))
         robot.wait(lambda _: len(robot.motion) == 0)
@@ -193,7 +203,7 @@ def main(args=None):
         
         # Detect right side stem
         frame = robot.collection()
-        nav_box = navigation.process_image(frame)
+        nav_box = robot.navigation.process_image(frame)
         x_box_nav, y_box_nav, w_box_nav, h_box_nav = nav_box
         offset_left: Position = robot.detect(Position(x=x, y=-120, r=0))
         
@@ -201,11 +211,19 @@ def main(args=None):
         robot.harvest()
         
         # Mapping
-        
+        #TODO Make an association between specific plant and its corresponding mapping please!
+        robot.navigation.mapping(frame)
         # Same for right side
         offset_right: Position = robot.detect(Position(x=x, y=120, r=0))
         # Correct robot location
         robot.position = (offset_left + offset_right) / 2
+    # Return to the stop location
+    # TODO
+
+    # ROW B harvesting: Move to each stop points 
+    for x in [160, 140, 120, 100]: #TODO unit and measurement
+        #TODO: when done ROW A copy behavior/encapsulate in method and call here
+
     # Return to the stop location
     # TODO
 

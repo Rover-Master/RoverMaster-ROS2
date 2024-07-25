@@ -32,6 +32,19 @@ class NavAlignment():
         else:
             print(f"Area have not med the criteria: {area}")
             return None
+        
+    def mapping(self, image):
+        results = self.model(image)
+        class_counts = {}
+        for box in results[0].boxes:
+            class_id = int(box.data[0][-1])  # Assuming this is the correct way to get class_id from your results
+            if class_id in class_counts:
+                class_counts[class_id] += 1
+            else:
+                class_counts[class_id] = 1
+
+        # summary = ", ".join(f"{count} {self.model.names[class_id]}" for class_id, count in class_counts.items()) # 2 Flowers, 2 Healthys, 1 Stem_Top, 3 Unhealthys
+        return class_counts # 0:Flower, 1:Healthy, 2:Stem_Top, 3:Unhealthy #Format: {0: 2, 3: 3, 1: 2, 2: 1}
     def save_detection_results(self, filtered_results, image_name, img_width, img_height):
         save_path = os.path.join(self.output_dir, image_name.replace('.png', '.txt'))
         with open(save_path, 'w') as file:
@@ -48,9 +61,9 @@ class Detection():
         self.output_dir = output_dir
         self.model = YOLO(self.model_path)  # Load model once in the constructor
 
-    def process_images(self, frame):
+    def process_images(self, image):
         os.makedirs(self.output_dir, exist_ok=True)
-        self.process_image(frame)
+        self.process_image(image)
 
     def process_image(self, image):
         # image_path = os.path.join(self.image_dir, image_name)
