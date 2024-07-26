@@ -24,7 +24,7 @@ setup(
     tests_require=["pytest"],
     entry_points={
         "console_scripts": [
-            "detector = mission.controller:main",
+            "main = mission.robot:main",
         ],
     },
 )

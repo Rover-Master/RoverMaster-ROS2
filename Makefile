@@ -1,7 +1,7 @@
 # Change default shell from `sh` to `bash` so we have `source` command available
 SHELL:=/bin/bash
 # Should have already been defined in setup scripts
-ROS_DISTRO?=iron
+ROS_DISTRO?=rolling
 # ROS2 Environment initialization
 ROS_SETUP?=/opt/ros/$(ROS_DISTRO)/setup.bash
 # Build time environment variables
