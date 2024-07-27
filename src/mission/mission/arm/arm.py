@@ -3,20 +3,36 @@ from . import util
 
 
 class Joint:
-    name = None
     ready = False
     moving = True
     pos = 0
 
-    def __init__(self, name: str = None):
+    def __init__(
+        self,
+        name: str,
+        max_speed: float = 60,
+        range: tuple[float, float] | None = None,
+        infinite: bool = False,
+    ):
         self.name = name
+        self.max_speed = max_speed
+        self.range = range
+        self.infinite = infinite
 
 
 class Arm:
-    J1, J2, J3, Z = JOINTS = [Joint("J1"), Joint("J2"), Joint("J3"), Joint("Z")]
+    J1, J2, J3, Z = JOINTS = [
+        Joint("J1", 30, (-270.0, 270.0)),
+        Joint("J2", 60, (-140.0, 140.0)),
+        Joint("J3", 90, infinite=True),
+        Joint("Z", 20, (0.0, 100.0)),
+    ]
 
-    def __init__(self, vid: int = None, pid: int = None):
-        self.serial = util.open_serial_port(util.find_serial_port(vid, pid))
+    def __init__(self, vid: int = None, pid: int = None, serial=None):
+        if serial is not None:
+            self.serial = serial
+        else:
+            self.serial = util.open_serial_port(util.find_serial_port(vid, pid))
         self.send("\nENABLE\n")
 
     def __del__(self):
@@ -119,3 +135,42 @@ class Arm:
         self.send(" ".join(command) + "\n")
         while self.moving(*joints_to_move):
             self.handle_message(self.recv())
+
+    def plan(self, *options: list[list[float | None]]):
+        optimal_option = None
+        optimal_duration = None
+        for option in options:
+            duration = 0
+            current_option: dict[str, float] = {}
+            valid = True
+            for joint, dst in zip(self.JOINTS, option):
+                if dst is None:
+                    current_option.append(joint.pos)
+                    continue
+                if joint.range is not None and not joint.infinite:
+                    # Validate range
+                    if dst < joint.range[0] or dst > joint.range[1]:
+                        valid = False
+                        break
+                if joint.infinite:
+                    # Infinite joint, choose optimal direction
+                    dst_forward = (dst - joint.pos) % 360.0
+                    dst_backward = 360.0 - dst_forward
+                    # Choose the shortest path
+                    if dst_forward <= dst_backward:
+                        dst = joint.pos + dst_forward
+                    else:
+                        dst = joint.pos - dst_backward
+                # Calculate duration required to cover the distance
+                joint_duration = abs(joint.pos - dst) / joint.max_speed
+                duration = max(duration, joint_duration)
+                current_option[joint.name] = dst
+            if valid:
+                if optimal_duration is None or duration < optimal_duration:
+                    optimal_option = current_option
+                    optimal_duration = duration
+        optimal_speeds = {
+            joint.name: abs(joint.pos - dst) / optimal_duration
+            for joint, dst in zip(self.JOINTS, optimal_option)
+        }
+        return optimal_option, optimal_speeds, optimal_duration
