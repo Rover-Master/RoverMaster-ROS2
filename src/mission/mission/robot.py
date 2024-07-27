@@ -11,7 +11,7 @@ from rclpy.node import Node
 from geometry_msgs.msg import Twist, Vector3
 
 # Detection
-# from model import NavAlignment, Detection
+from .actions.detection import NavAlignment, Detection
 
 
 class Position:
@@ -58,9 +58,9 @@ class Robot(Node):
     # arm = Arm(0x2341, 0x0070)
     models = {
         # Initiate detection
-        # "detection": Detection(""),
+        "detection": Detection(""),
         # Navigation alignment
-        # "navigation": NavAlignment("")
+        "navigation": NavAlignment("")
     }
 
     # logger of mapped leaves
@@ -305,11 +305,21 @@ def main(args=None):
         robot.wait(lambda: len(robot.motion) == 0)
 
         # Detect right side stem/find center
-        frame = robot.take_picture()
-        nav_box = robot.navigation.process_image(frame)
+        frame_first = robot.take_picture()
+        nav_box = robot.navigation.process_image(frame_first)
         if nav_box is not None:
-            x_box_nav, y_box_nav, _, _ = nav_box # Pixel unit
             #TODO calculate the 3D position
+            robot.arm.move(J3=45)
+            frame_sec = robot.take_picture()
+            good_matches, kp1, kp2 = robot.navigation.detect_and_match_features(frame_first, frame_sec)
+
+            # Visualization confirmation
+            # img_matches = cv2.drawMatches(robot.navigation.prepare_roi(frame_first, robot.navigation.process_image(frame_first)), kp1, robot.navigation.prepare_roi(frame_second, robot.navigation.process_image(frame_second)), kp2, good_matches, None, flags=cv2.DrawMatchesFlags_NOT_DRAW_SINGLE_POINTS)
+            # cv2.imshow("Matches", img_matches)
+            # cv2.waitKey(0)
+            # cv2.destroyAllWindows()
+            
+
             offset_left: Position = robot.detect(Position(x=x, y=-120, r=0))
 
         # Harvest
