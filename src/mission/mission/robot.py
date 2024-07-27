@@ -307,8 +307,10 @@ def main(args=None):
         # Detect right side stem/find center
         frame = robot.take_picture()
         nav_box = robot.navigation.process_image(frame)
-        x_box_nav, y_box_nav, _, _ = nav_box
-        offset_left: Position = robot.detect(Position(x=x, y=-120, r=0))
+        if nav_box is not None:
+            x_box_nav, y_box_nav, _, _ = nav_box # Pixel unit
+            #TODO calculate the 3D position
+            offset_left: Position = robot.detect(Position(x=x, y=-120, r=0))
 
         # Harvest
         robot.harvest(Position(x=x_box_nav, y=y_box_nav, r=0))
