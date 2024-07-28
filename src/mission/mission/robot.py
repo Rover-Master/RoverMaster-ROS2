@@ -16,7 +16,7 @@ from rclpy.node import Node
 from geometry_msgs.msg import Twist, Vector3
 
 # Detection
-from .actions.detection import NavAlignment, Detection
+from .actions.detection import NavAlignment, Detection, Mapping
 
 
 class Position:
@@ -66,10 +66,10 @@ class Robot(Node):
     # Robot arm driver
     # arm = Arm(0x2341, 0x0070)
     models = {
-        # Initiate detection
-        "detection": Detection(""),
-        # Navigation alignment
-        "navigation": NavAlignment("")
+        "detection": Detection("/home/ubuntu/Documents/final_codes/RoverMaster-ROS2/pre-trained_weights/detection_harvest.pt"),
+        "navigation": NavAlignment("/home/ubuntu/Documents/final_codes/RoverMaster-ROS2/pre-trained_weights/navigation.pt"),
+        "mapping" : Mapping("/home/ubuntu/Documents/final_codes/RoverMaster-ROS2/pre-trained_weights/mapping.pt")
+
     }
 
     # logger of mapped leaves
@@ -340,6 +340,7 @@ def main(args=None):
         robot.wait(lambda: len(robot.motion) == 0)
 
         # Detect right side stem/find center
+        
         frame_first = robot.take_picture()
         nav_box = robot.navigation.process_image(frame_first)
         if nav_box is not None:
