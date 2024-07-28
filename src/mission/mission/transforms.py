@@ -3,6 +3,11 @@ import numpy as np
 
 X, Y, Z = 0, 1, 2
 
+
+def normalize(vec: np.ndarray):
+    return vec / np.linalg.norm(vec)
+
+
 # epsilon for testing whether a number is close to zero
 _EPS = np.finfo(float).eps * 4.0
 
