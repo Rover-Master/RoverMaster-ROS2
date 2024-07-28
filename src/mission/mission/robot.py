@@ -2,8 +2,14 @@
 import time, math, cv2, sys, numpy as np
 from typing import Callable
 from .transforms import X, Y, Z, rotate_around
-from math import radians, degrees
+from math import radians, degrees, atan2, sqrt
 from .arm import Arm
+from .io import OutFile
+from .kinematics import Kinematics
+
+
+def normalize_angle(angle: float) -> float:
+    return (angle + 180) % 360 - 180
 
 
 def sign(x: float) -> int:
@@ -13,7 +19,7 @@ def sign(x: float) -> int:
 # ROS2 Related
 import rclpy
 from rclpy.node import Node
-from geometry_msgs.msg import Twist, Vector3
+from geometry_msgs.msg import Twist
 
 # Detection
 from .actions.detection import NavAlignment, Detection
@@ -40,6 +46,7 @@ class Velocity:
 
 
 class Robot(Node):
+    # Heading initialization
     initial_heading_offset = -90
     heading_initialized = False
     zero_heading: float = 0
@@ -48,8 +55,8 @@ class Robot(Node):
     drift_rate: float = None  # deg/s
 
     # Multiplier constant for the velocities
-    K_VEL_LINEAR = 1218.0  # mm/s
-    K_VEL_ANGULAR = 180.0  # deg/s
+    K_VEL_LINEAR = 1280.0  # mm/s
+    K_VEL_ANGULAR = 150.0  # deg/s
 
     # Latest estimated position, in millimeters
     # Origin is at [TODO]
@@ -65,44 +72,16 @@ class Robot(Node):
 
     # Robot arm driver
     # arm = Arm(0x2341, 0x0070)
+    # Arm inverse kinematics
+    kinematics = Kinematics(L1=170, L2=180, L3=-70)
+
+    # Detection models
     models = {
         # Initiate detection
         "detection": Detection(""),
         # Navigation alignment
-        "navigation": NavAlignment("")
+        "navigation": NavAlignment(""),
     }
-
-    # logger of mapped leaves
-    logger = []
-
-    def write_solution_file(self):
-        # Generate Plant Numbers
-        plant_numbers = [
-            f"Plant {letter}{number}" for letter in "AB" for number in range(1, 13)
-        ]
-
-        # Initial file writing
-        with open("Initial_Mapping_ABE_Gator", "w") as file:
-            # Write header
-            file.write("Plant Number Healthy Unhealthy Stems Flower\n")
-
-            for entry in self.logger:
-                file.write(
-                    f"{plant_numbers[i]} {entry['Healthy']} {entry['Unhealthy']} {entry['Flower']}\n"
-                )
-            file.close()
-
-        # Final file writing
-        with open("Final_Mapping_ABE_Gator", "w") as file:
-            # Write header
-            file.write("Plant Number Healthy Unhealthy Stems Flower\n")
-
-            for entry, i in zip(self.logger, range(24)):
-                flowers = 0
-                if entry["Flower"] >= 1:
-                    flowers = 1
-                    file.write(f"{plant_numbers[i]} {entry['Healthy']} {0} {flowers}\n")
-            file.close()
 
     last_updated_angle = None
     last_updated_time: float = None  # Seconds
@@ -153,7 +132,6 @@ class Robot(Node):
         # )
 
     def update_velocity(self, next_velocity: Twist):
-        self.odm_integrator()
         self.velocity.linear = next_velocity.linear.x * self.K_VEL_LINEAR
         self.velocity.angular = next_velocity.angular.z * self.K_VEL_ANGULAR
 
@@ -162,35 +140,64 @@ class Robot(Node):
     def odm_integrator(self):
         """Accumulate transient positional offset to the estimated position"""
         now = time.time()
-        if self.last_odm_update_time is not None:
+        if self.last_odm_update_time is not None and self.prev_velocity is not None:
             dt = now - self.last_odm_update_time
-            dist = self.velocity.linear * dt / 1000.0
+            dist = self.prev_velocity.linear * dt
             self.position.x += dist * math.cos(radians(self.position.r))
             self.position.y += dist * math.sin(radians(self.position.r))
         self.last_odm_update_time = now
 
-    def move_to(self, dst: Position, speed: float = 200.0):
+    def turn_to(
+        self,
+        heading: float,
+        angular_vel: float = 45.0,
+        tolerance: float = 1.0,
+        timeout: float = 10.0,
+    ):
+        """
+        Turn to the desired heading
+        """
+        for _ in range(int(round(timeout * self.MOTION_FREQ))):
+            delta = normalize_angle(heading - self.position.r)
+            if abs(delta) < tolerance:
+                break
+            self.motion = [Velocity(linear=0, angular=sign(delta) * angular_vel)]
+            self.wait(lambda: len(self.motion) == 0)
+
+    def move_to(self, dst: Position, speed: float = 200.0, kr: float = 2.0):
         """
         Calculates a viable strategy to move from current position to the destination
         Both translation and heading need to be satisfied
         """
-        distance = dst.x - self.position.x
-        velocity = speed * sign(distance)  # mm/s
-        duration = distance / velocity
-        self.motion = [Velocity(linear=velocity, angular=0)] * int(
-            duration * self.MOTION_FREQ
-        )
-        return
-        # Convert the destination location from world coordinate to robot coordinate
         dx = dst.x - self.position.x
         dy = dst.y - self.position.y
-        R1 = rotate_around(Z, radians(self.position.r))[:2, :2]
-        dx, dy = (R1 @ np.ndarray([[dx, dy]]).T)[:, 0]
-        dr = dst.r - self.position.r
+        distance = sqrt(dx**2 + dy**2)
+
+        heading = degrees(atan2(dy, dx))
+
+        if abs(normalize_angle(heading - self.position.r)) > 90:
+            # Back off
+            heading = normalize_angle(heading + 180)
+            speed = -speed
+        # Step 1: turn to desired heading
+        self.turn_to(heading)
+        # Step 2: move given distance, lock the heading
+        for _ in range(int(distance / abs(speed))):
+            self.motion = [
+                Velocity(
+                    linear=speed,
+                    angular=kr * normalize_angle(heading - self.position.r),
+                )
+            ]
+            self.wait(lambda: len(self.motion) == 0)
+        # Step 3: turn to the final heading
+        self.turn_to(dst.r)
+        return
 
     prev_velocity: Velocity | None = None
 
     def timed_velocity_update(self):
+        self.odm_integrator()
         vel_msg = Twist()
         if len(self.motion):
             velocity = self.motion[0]
@@ -222,8 +229,21 @@ class Robot(Node):
         self.base_velocity = self.create_publisher(Twist, "base/velocity/set", 10)
         # Call task in an infinite loop
         self.create_timer(1.0 / self.MOTION_FREQ, self.timed_velocity_update)
+        self.create_timer(0.5, self.report_position)
         # initialize the arm
         # self.arm.init()
+        return
+        # Prepare the output file for writing
+        self.initial_mapping = OutFile("/mount/disk/Initial_Mapping_ABE_Gator.txt")
+        self.final_mapping = OutFile("/mount/disk/Final_Mapping_ABE_Gator.txt")
+        line = "Plant Number Healthy Unhealthy Stems Flower\n"
+        self.initial_mapping.write(line)
+        self.final_mapping.write(line)
+
+    def report_position(self):
+        self.get_logger().info(
+            f"POS X={self.position.x} Y={self.position.y} HDG={self.position.r}"
+        )
 
     def wait(self, condition: Callable):
         while rclpy.ok():
@@ -234,6 +254,10 @@ class Robot(Node):
             except Exception as e:
                 self.get_logger().error(f"Robot.wait(): error in condition: {e}")
                 return
+
+    def delay(self, seconds: float):
+        now = time.time()
+        self.wait(lambda: time.time() - now > seconds)
 
     def take_picture(self) -> np.ndarray:
         # TODO check the index
@@ -255,82 +279,69 @@ class Robot(Node):
         y = dis * math.sin(radians(acc_angle)) + stemp_center.y
         return Position(x=x, y=y, r=0)
 
-    def harvest(self, stemp_center):
-        self.arm.move(J1=90, J2=0, J3=J3)
-        # init camera position as (0,0)
-        camera_position = Position(x=0, y=0, r=0)
-        # rotate around stemp, do 8 stops
-        for J3 in range(0, 361, 45):
-            # take picture
-            frame = self.take_picture()
-            # Determine all bboxes of images in frame (only unhealthy, flowers)
-            det_boxes = self.detection.process_image(frame)
-
-            # Update camera position
-            camera_position = self.update_arm_camera_position(J3, stemp_center)
-            # Get closest target
-            target_plant = self.detection.get_closest_target(det_boxes, camera_position)
-            time.sleep(1)  # TODO Determine if necessary, and how long
-
-            # Harvest if not None and move j3 if is None
-            if target_plant is not None:
-                # move to z = min height
-                self.arm.move(Z=100)
-                # move endeffector to trimming position (further inward)
-                self.arm.move(E=10)
-                self.arm.move(Z=0)
-                self.arm.move(E=180)
-                # move endeffector back out (all the way to home of endeffector)
-                self.arm.move(E=0)
-
 
 def main(args=None):
     rclpy.init(args=args)
     robot = Robot()
     starting_pos = robot.get_parameter("starting_pos").value
+    starting_pos = "R"
     if starting_pos == "L":
-        robot.initial_heading_offset = 90
+        robot.initial_heading_offset = 90.0
     else:
-        robot.initial_heading_offset = -90
+        robot.initial_heading_offset = -90.0
     # Init the robot
     robot.get_logger().info("Waiting for heading to be initialized ...")
     robot.wait(lambda: robot.heading_initialized)
-
-    GRID = 645.16
-
-    robot.move_to(Position(x=robot.position.x + GRID, y=robot.position.y, r=0))
-    robot.wait(lambda: len(robot.motion) == 0)
-
-    now = time.time()
-    robot.wait(lambda: time.time() - now > 1.0)
-
-    robot.move_to(Position(x=robot.position.x - GRID, y=robot.position.y, r=0))
-    robot.wait(lambda: len(robot.motion) == 0)
-    # Mission completed, wait for exit signal
-    robot.wait(lambda: False)
-    return
-
     # Wait 5 seconds for precise measurement of sensor drift
     robot.get_logger().info("Measuring sensor drift ...")
-    now = time.time()
-    robot.wait(lambda: time.time() - now > 1.0)
+    robot.delay(1)
     # First: Move & Turn to initial position
     robot.get_logger().info(f"Moving out of parking position <{starting_pos}> ...")
-    turn = 90 if starting_pos == "L" else -90
-    robot.motion = [Velocity(linear=150, angular=turn / 1.4)] * 10000
-    if starting_pos == "L":
-        robot.wait(lambda: robot.position.r >= -turn / 30 or len(robot.motion) == 0)
-    else:
-        robot.wait(lambda: robot.position.r <= -turn / 30 or len(robot.motion) == 0)
-    robot.motion = []
-    robot.get_logger().info("Move completed")
     now = time.time()
-    robot.wait(lambda: time.time() > now + 1.0)
+    turn = robot.initial_heading_offset
+    robot.motion = list(
+        [Velocity(linear=float(v), angular=0) for v in range(100, 300, 10)]
+    )
+    robot.motion += [Velocity(linear=450, angular=turn / 1.85)] * 1000
+    threshold = -turn / 30
+    if turn > 0:
+        robot.wait(lambda: robot.position.r >= threshold or len(robot.motion) == 0)
+    else:
+        robot.wait(lambda: robot.position.r <= threshold or len(robot.motion) == 0)
+    robot.motion = []
+    robot.get_logger().info(f"Turn completed in {time.time() - now} seconds ...")
+
     # Second: Move to the starting point
     robot.move_to(
-        Position(x=robot.position.x + 3.1415926 * 100, y=robot.position.y, r=0)
+        Position(x=robot.position.x + 120, y=robot.position.y, r=0), speed=300
     )
-    robot.wait(lambda: robot.motion is None)
+    robot.wait(lambda: len(robot.motion) == 0)
+    robot.move_to(Position(x=robot.position.x + 120, y=robot.position.y, r=0))
+    robot.wait(lambda: len(robot.motion) == 0)
+    robot.position.x = 0
+    robot.position.y = 0
+
+    robot.delay(1)
+    for _ in [None] * 12:
+        robot.move_to(Position(x=robot.position.x + 304.8, y=robot.position.y, r=0))
+        robot.wait(lambda: len(robot.motion) == 0)
+        robot.delay(1)
+
+    robot.get_logger().info(f"Harvesting completed, backing off")
+    robot.move_to(Position(x=-280, y=robot.position.y, r=0))
+    robot.wait(lambda: len(robot.motion) == 0)
+
+    # Turn to parking spot
+    now = time.time()
+    robot.motion = [Velocity(linear=-320, angular=turn / 2.8)] * 1000
+    threshold = turn + threshold
+    if turn > 0:
+        robot.wait(lambda: robot.position.r >= threshold or len(robot.motion) == 0)
+    else:
+        robot.wait(lambda: robot.position.r <= threshold or len(robot.motion) == 0)
+    robot.motion = []
+    robot.get_logger().info(f"Turn completed in {time.time() - now} seconds ...")
+
     # Mission completed, wait for exit signal
     robot.wait(lambda: False)
     return
@@ -343,17 +354,18 @@ def main(args=None):
         frame_first = robot.take_picture()
         nav_box = robot.navigation.process_image(frame_first)
         if nav_box is not None:
-            #TODO calculate the 3D position
+            # TODO calculate the 3D position
             robot.arm.move(J3=45)
             frame_sec = robot.take_picture()
-            good_matches, kp1, kp2 = robot.navigation.detect_and_match_features(frame_first, frame_sec)
+            good_matches, kp1, kp2 = robot.navigation.detect_and_match_features(
+                frame_first, frame_sec
+            )
 
             # Visualization confirmation
             # img_matches = cv2.drawMatches(robot.navigation.prepare_roi(frame_first, robot.navigation.process_image(frame_first)), kp1, robot.navigation.prepare_roi(frame_second, robot.navigation.process_image(frame_second)), kp2, good_matches, None, flags=cv2.DrawMatchesFlags_NOT_DRAW_SINGLE_POINTS)
             # cv2.imshow("Matches", img_matches)
             # cv2.waitKey(0)
             # cv2.destroyAllWindows()
-            
 
             offset_left: Position = robot.detect(Position(x=x, y=-120, r=0))
 
