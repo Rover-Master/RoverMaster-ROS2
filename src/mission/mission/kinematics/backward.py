@@ -9,8 +9,10 @@ def solve(x, y, r, L1, L2, L3) -> tuple[float, float, float] | None:
     j3 = ee - R(radians(r)) @ Vec(L3, 0)
     # Check for feasibility of J3 position
     dist = sqrt(float(np.sum(j3**2)))
-    if dist > abs(abs(L1) + abs(L2)) or dist < abs(abs(L1) - abs(L2)):
-        return None
+    if dist > abs(abs(L1) + abs(L2)):
+        return []
+    if dist < abs(abs(L1) - abs(L2)):
+        return []
     # Find rotational angle for pseudo joint J1-J3
     delta_r = degrees(atan2(j3[1], j3[0]))
     # Find viable solution(s) using Heron's formula

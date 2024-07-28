@@ -123,6 +123,15 @@ class Arm:
         while not self.ready(*joints):
             self.handle_message(self.recv())
 
+    def speed(self, **kwargs: dict[str, float]):
+        command = ["SPEED"]
+        for j in self.JOINTS:
+            if j.name in kwargs.keys():
+                command.append(f"{j.name}={kwargs[j.name]}")
+            else:
+                command.append(f"{j.name}={j.max_speed}")
+        self.send(" ".join(command) + "\n")
+
     def move(self, **kwargs: dict[str, float]):
         joints_to_move = []
         command = ["MOVE"]
@@ -137,7 +146,7 @@ class Arm:
             self.handle_message(self.recv())
 
     def plan(self, *options: list[list[float | None]]):
-        optimal_option = None
+        optimal_angles = None
         optimal_duration = None
         for option in options:
             duration = 0
@@ -167,10 +176,12 @@ class Arm:
                 current_option[joint.name] = dst
             if valid:
                 if optimal_duration is None or duration < optimal_duration:
-                    optimal_option = current_option
+                    optimal_angles = current_option
                     optimal_duration = duration
+        if optimal_angles is None or optimal_duration is None:
+            return None, None, None
         optimal_speeds = {
             joint.name: abs(joint.pos - dst) / optimal_duration
-            for joint, dst in zip(self.JOINTS, optimal_option)
+            for joint, dst in zip(self.JOINTS, optimal_angles)
         }
-        return optimal_option, optimal_speeds, optimal_duration
+        return optimal_angles, optimal_speeds, optimal_duration

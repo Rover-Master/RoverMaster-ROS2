@@ -7,15 +7,6 @@ from .arm import Arm
 from .io import OutFile
 from .kinematics import Kinematics
 
-
-def normalize_angle(angle: float) -> float:
-    return (angle + 180) % 360 - 180
-
-
-def sign(x: float) -> int:
-    return 1 if float(x) >= 0 else -1
-
-
 # ROS2 Related
 import rclpy
 from rclpy.node import Node
@@ -23,6 +14,14 @@ from geometry_msgs.msg import Twist
 
 # Detection
 from .actions.detection import NavAlignment, Detection, Mapping
+
+
+def normalize_angle(angle: float) -> float:
+    return (angle + 180) % 360 - 180
+
+
+def sign(x: float) -> int:
+    return 1 if float(x) >= 0 else -1
 
 
 class Position:
@@ -47,12 +46,13 @@ class Velocity:
 
 class Robot(Node):
     # Heading initialization
-    initial_heading_offset = -90
+    initial_heading = -90
     heading_initialized = False
     zero_heading: float = 0
     # Drift compensation
     delta_angle: float = 0
     drift_rate: float = None  # deg/s
+    drift_lock: bool = False
 
     # Multiplier constant for the velocities
     K_VEL_LINEAR = 1280.0  # mm/s
@@ -71,15 +71,15 @@ class Robot(Node):
     motion: list[Velocity] = []
 
     # Robot arm driver
-    # arm = Arm(0x2341, 0x0070)
+    arm = Arm(0x2341, 0x0070)
     # Arm inverse kinematics
     kinematics = Kinematics(L1=170, L2=180, L3=-70)
 
     # Detection models
     models = {
-        "detection": Detection("RoverMaster-ROS2/pre-trained_weights/detection_harvest.pt"),
-        "navigation": NavAlignment("RoverMaster-ROS2/pre-trained_weights/navigation.pt"),
-        "mapping" : Mapping("RoverMaster-ROS2/pre-trained_weights/mapping.pt")
+        "detection": Detection("pre-trained_weights/detection_harvest.pt"),
+        "navigation": NavAlignment("pre-trained_weights/navigation.pt"),
+        "mapping": Mapping("pre-trained_weights/mapping.pt"),
     }
 
     last_updated_angle = None
@@ -101,7 +101,11 @@ class Robot(Node):
         else:
             dt = 0
         # Sensor drift compensation
-        if self.prev_velocity is None and self.last_updated_angle is not None:
+        if (
+            self.prev_velocity is None
+            and self.last_updated_angle is not None
+            and not self.drift_lock
+        ):
             delta_angle = normalize_angle(angle - self.last_updated_angle)
             drift_rate = delta_angle / dt
             if self.drift_rate is not None:
@@ -118,11 +122,11 @@ class Robot(Node):
         # Initialize the heading
         if not self.heading_initialized:
             # Record initial heading
-            self.zero_heading = normalize_angle(angle + self.initial_heading_offset)
+            self.zero_heading = normalize_angle(angle - self.initial_heading)
             self.heading_initialized = True
             self.delta_angle = 0
             self.position.r = normalize_angle(angle - self.zero_heading)
-        elif self.prev_velocity is not None:
+        elif self.prev_velocity is not None or self.drift_lock:
             self.position.r = normalize_angle(
                 angle - self.zero_heading - self.delta_angle
             )
@@ -149,21 +153,23 @@ class Robot(Node):
     def turn_to(
         self,
         heading: float,
-        angular_vel: float = 45.0,
-        tolerance: float = 1.0,
+        angular_vel: float = 20.0,
+        linear_vel: float = 0.0,
+        tolerance: float = 0.6,
         timeout: float = 10.0,
     ):
-        """
+        """aw
         Turn to the desired heading
         """
+        dir = sign(normalize_angle(heading - self.position.r))
         for _ in range(int(round(timeout * self.MOTION_FREQ))):
             delta = normalize_angle(heading - self.position.r)
-            if abs(delta) < tolerance:
+            if abs(delta) < tolerance or sign(delta) != dir:
                 break
-            self.motion = [Velocity(linear=0, angular=sign(delta) * angular_vel)]
+            self.motion = [Velocity(linear=linear_vel, angular=dir * angular_vel)]
             self.wait(lambda: len(self.motion) == 0)
 
-    def move_to(self, dst: Position, speed: float = 200.0, kr: float = 2.0):
+    def move_to(self, dst: Position, speed: float = 200.0, kr: float = 6.0):
         """
         Calculates a viable strategy to move from current position to the destination
         Both translation and heading need to be satisfied
@@ -181,7 +187,7 @@ class Robot(Node):
         # Step 1: turn to desired heading
         self.turn_to(heading)
         # Step 2: move given distance, lock the heading
-        for _ in range(int(distance / abs(speed))):
+        for _ in range(int(distance * self.MOTION_FREQ / abs(speed))):
             self.motion = [
                 Velocity(
                     linear=speed,
@@ -214,10 +220,7 @@ class Robot(Node):
 
     def __init__(self):
         super().__init__("mission")
-        self.declare_parameter("nav_model_path", "")
-        self.declare_parameter("seg_model_path", "")
-        self.declare_parameter("map_model_path", "")
-        self.declare_parameter("starting_pos", "L")
+        self.declare_parameter("start_pos", "L")
         # Connect to robot drive train
         self.base_attitude_get = self.create_subscription(
             Twist, "base/velocity/get", self.update_velocity, 10
@@ -230,8 +233,7 @@ class Robot(Node):
         self.create_timer(1.0 / self.MOTION_FREQ, self.timed_velocity_update)
         self.create_timer(0.5, self.report_position)
         # initialize the arm
-        # self.arm.init()
-        return
+        self.arm.init()
         # Prepare the output file for writing
         self.initial_mapping = OutFile("/mount/disk/Initial_Mapping_ABE_Gator.txt")
         self.final_mapping = OutFile("/mount/disk/Final_Mapping_ABE_Gator.txt")
@@ -282,63 +284,110 @@ class Robot(Node):
 def main(args=None):
     rclpy.init(args=args)
     robot = Robot()
-    starting_pos = robot.get_parameter("starting_pos").value
-    starting_pos = "R"
-    if starting_pos == "L":
-        robot.initial_heading_offset = 90.0
+    start_pos = robot.get_parameter("start_pos").value
+    if start_pos == "L":
+        robot.initial_heading = -90.0
     else:
-        robot.initial_heading_offset = -90.0
+        robot.initial_heading = 90.0
     # Init the robot
     robot.get_logger().info("Waiting for heading to be initialized ...")
     robot.wait(lambda: robot.heading_initialized)
     # Wait 5 seconds for precise measurement of sensor drift
     robot.get_logger().info("Measuring sensor drift ...")
     robot.delay(1)
+    robot.drift_lock = True
     # First: Move & Turn to initial position
-    robot.get_logger().info(f"Moving out of parking position <{starting_pos}> ...")
+    robot.get_logger().info(f"Moving out of parking position <{start_pos}> ...")
     now = time.time()
-    turn = robot.initial_heading_offset
-    robot.motion = list(
-        [Velocity(linear=float(v), angular=0) for v in range(100, 300, 10)]
-    )
-    robot.motion += [Velocity(linear=450, angular=turn / 1.85)] * 1000
-    threshold = -turn / 30
-    if turn > 0:
-        robot.wait(lambda: robot.position.r >= threshold or len(robot.motion) == 0)
-    else:
-        robot.wait(lambda: robot.position.r <= threshold or len(robot.motion) == 0)
-    robot.motion = []
+    robot.turn_to(0, angular_vel=90 / 1.85, linear_vel=450, tolerance=3.0)
     robot.get_logger().info(f"Turn completed in {time.time() - now} seconds ...")
 
     # Second: Move to the starting point
-    robot.move_to(
-        Position(x=robot.position.x + 120, y=robot.position.y, r=0), speed=300
-    )
+    robot.position.x = -180
+    if start_pos == "L":
+        robot.position.y = -0
+    else:
+        robot.position.y = 0
+    robot.move_to(Position(x=0, y=0, r=0), speed=200)
     robot.wait(lambda: len(robot.motion) == 0)
-    robot.move_to(Position(x=robot.position.x + 120, y=robot.position.y, r=0))
-    robot.wait(lambda: len(robot.motion) == 0)
-    robot.position.x = 0
-    robot.position.y = 0
 
     robot.delay(1)
-    for _ in [None] * 12:
-        robot.move_to(Position(x=robot.position.x + 304.8, y=robot.position.y, r=0))
-        robot.wait(lambda: len(robot.motion) == 0)
-        robot.delay(1)
+    for row in range(1, 13):
+        robot.move_to(Position(x=robot.position.x + 304.8, y=0, r=0))
+        y_offset = 90  # millimeters
+        robot.arm.speed()
+        robot.arm.move(Z=0)
+        # Sweep left side to locate the plant
+        model_nav: NavAlignment = robot.models["navigation"]
+
+        def find_plant(x_range: list[float], y_offset: float, camera_angle: float):
+            detections = []
+            for x in x_range:
+                solutions = robot.kinematics.backward(x, y_offset, camera_angle)
+                angles, speeds, _ = robot.arm.plan(solutions)
+                robot.arm.speed(**speeds)
+                robot.arm.move(**angles)
+                # Camera is now at (x, y_offset, 90 deg)
+                R = rotate_around(Y, 30) @ rotate_around(Z, camera_angle)
+                t = np.array([[x, y_offset, 220]]).T
+                image = robot.take_picture()
+                result = model_nav.process_image(image)
+                if result is not None:
+                    detections.append([result, R, t])
+                if len(detections) >= 2:
+                    break
+            if len(detections) >= 2:
+                (d1, R1, t1), (d2, R2, t2) = detections[:2]
+                # Get R and t from camera 1 to camera 2
+                t = R1.T @ (t2 - t1)
+                R = R2 @ R1.T
+                # Get the position of the plant relative to camera 1
+                relative_position = model_nav.point_reconstruction(d1, d2, R, t)
+                # Get the position of the plant relative to the robot
+                return list((R1 @ relative_position + t1).reshape(-1, 1))
+            else:
+                return None
+
+        offset_detection = 90
+
+        position_left_plant = find_plant(range(-100, 101, 10), y_offset, 90)
+        if position_left_plant is None:
+            robot.get_logger().info(
+                f"Left side plant not found, moving to next position ..."
+            )
+        else:
+            cx, cy, _ = position_left_plant
+            mapping = None
+            for angle in range(0, 361, 45):
+                dx = offset_detection * math.cos(radians(angle))
+                dy = offset_detection * math.sin(radians(angle))
+                solutions = robot.kinematics.backward(cx + dx, cy + dy, angle)
+                angles, speeds, _ = robot.arm.plan(solutions)
+                if angles is not None and speeds is not None:
+                    robot.arm.speed(**speeds)
+                    robot.arm.move(**angles)
+                    image = robot.take_picture()
+                    if mapping is None:
+                        mapping = robot.models["mapping"].mapping(image)
+                        robot.initial_mapping.write(f"Plant {row}L {mapping}")
+                    boxes = robot.models["detection"].process_image(image)
+                    if boxes is not None:
+                        box_interest = robot.models["detection"].det_target(boxes, Position(cx, cy, angle))s
+                        
+
+        position_right_plant = find_plant(range(-100, 101, 10), -y_offset, -90)
 
     robot.get_logger().info(f"Harvesting completed, backing off")
-    robot.move_to(Position(x=-280, y=robot.position.y, r=0))
+    robot.move_to(Position(x=0, y=robot.position.y, r=0), speed=300)
+    robot.move_to(Position(x=-500, y=robot.position.y, r=0), speed=400)
     robot.wait(lambda: len(robot.motion) == 0)
 
     # Turn to parking spot
+    robot.get_logger().info(f"Parking into end position ...")
     now = time.time()
-    robot.motion = [Velocity(linear=-320, angular=turn / 2.8)] * 1000
-    threshold = turn + threshold
-    if turn > 0:
-        robot.wait(lambda: robot.position.r >= threshold or len(robot.motion) == 0)
-    else:
-        robot.wait(lambda: robot.position.r <= threshold or len(robot.motion) == 0)
-    robot.motion = []
+    robot.turn_to(
+        -robot.initial_heading, angular_vel=90 / 2.2, linear_vel=-400, tolerance=3.0
+    )
     robot.get_logger().info(f"Turn completed in {time.time() - now} seconds ...")
 
     # Mission completed, wait for exit signal
@@ -350,7 +399,7 @@ def main(args=None):
         robot.wait(lambda: len(robot.motion) == 0)
 
         # Detect right side stem/find center
-        
+
         frame_first = robot.take_picture()
         nav_box = robot.navigation.process_image(frame_first)
         if nav_box is not None:

@@ -1,0 +1,6 @@
+<launch>
+  <node pkg="rover_driver" exec="base" namespace="rover"/>
+  <node pkg="mission" exec="main" namespace="rover">
+    <param name="start_pos" value="R"/>
+  </node>
+</launch>

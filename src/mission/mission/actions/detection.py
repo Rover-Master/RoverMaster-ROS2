@@ -9,10 +9,10 @@ from mpl_toolkits.mplot3d import Axes3D
 
 
 # Inference Nav
-class NavAlignment():
+class NavAlignment:
     def __init__(self, model_path):
         self.model_path = model_path
-        self.model = YOLO(self.model_path) 
+        self.model = YOLO(self.model_path)
 
     def process_image(self, image):
         results = self.model(image)
@@ -35,7 +35,7 @@ class NavAlignment():
     #     # Get detection
     #     bbox1 = self.process_image(image1)
     #     bbox2 = self.process_image(image2)
-        
+
     #     # Initialize SIFT detector
     #     sift = cv2.SIFT_create()
     #     # surf = cv2.SURF_create()
@@ -75,51 +75,56 @@ class NavAlignment():
 
     #     return points_3d
 
+    def point_reconstruction(self, center1, center2, R, t):
 
-    def point_recontruction(self,center1, center2, R, t):
-            
-            if not isinstance(center1, np.ndarray):
-                center1 = center1.numpy()  
-            if not isinstance(center2, np.ndarray):
-                center2 = center2.numpy() 
+        if not isinstance(center1, np.ndarray):
+            center1 = center1.numpy()
+        if not isinstance(center2, np.ndarray):
+            center2 = center2.numpy()
 
-            # Intrinsic matrix of teh camera
-            K = np.array([[1.72450087e+03, 0.00000000e+00, 5.25392337e+02],
-                        [0.00000000e+00, 2.00311395e+03, 1.08207026e+03],
-                        [0.00000000e+00, 0.00000000e+00, 1.00000000e+00]])
-            
-            
-            if center1.shape[0] == 2:
-                center1 = np.append(center1, 1)  
-            if center2.shape[0] == 2:
-                center2 = np.append(center2, 1)  
-            
-            
-            # Compute projection matrices
-            P1 = K @ np.hstack((np.eye(3), np.zeros((3, 1))))
-            P2 = K @ np.hstack((R, np.array([[t[0]], [t[1]], [t[2]]])))
+        # Intrinsic matrix of teh camera
+        K = np.array(
+            [
+                [1.72450087e03, 0.00000000e00, 5.25392337e02],
+                [0.00000000e00, 2.00311395e03, 1.08207026e03],
+                [0.00000000e00, 0.00000000e00, 1.00000000e00],
+            ]
+        )
 
-            # Normalize points
-            normalized_point1 = np.linalg.inv(K) @ np.array([center1[0], center1[1], 1])
-            normalized_point2 = np.linalg.inv(K) @ np.array([center2[0], center2[1], 1])
+        if center1.shape[0] == 2:
+            center1 = np.append(center1, 1)
+        if center2.shape[0] == 2:
+            center2 = np.append(center2, 1)
 
-            # Prepare points for triangulation 
-            points1 = normalized_point1[:2].reshape(2, 1)
-            points2 = normalized_point2[:2].reshape(2, 1)
-            
-            # Triangulate points to find 3D point
-            point_4d_hom = cv2.triangulatePoints(P1, P2, points1.reshape(2, 1), points2.reshape(2, 1))
-            point_3d = cv2.convertPointsFromHomogeneous(point_4d_hom.T) # Front of the camera
+        # Compute projection matrices
+        P1 = K @ np.hstack((np.eye(3), np.zeros((3, 1))))
+        P2 = K @ np.hstack((R, np.array([[t[0]], [t[1]], [t[2]]])))
 
-            return point_3d
+        # Normalize points
+        normalized_point1 = np.linalg.inv(K) @ np.array([center1[0], center1[1], 1])
+        normalized_point2 = np.linalg.inv(K) @ np.array([center2[0], center2[1], 1])
+
+        # Prepare points for triangulation
+        points1 = normalized_point1[:2].reshape(2, 1)
+        points2 = normalized_point2[:2].reshape(2, 1)
+
+        # Triangulate points to find 3D point
+        point_4d_hom = cv2.triangulatePoints(
+            P1, P2, points1.reshape(2, 1), points2.reshape(2, 1)
+        )
+        point_3d = cv2.convertPointsFromHomogeneous(
+            point_4d_hom.T
+        )  # Front of the camera
+
+        return point_3d
 
 
 # Inference Detection
-class Detection():
+class Detection:
     def __init__(self, model_path):
         self.model_path = model_path
-        self.model = YOLO(self.model_path)  
-    
+        self.model = YOLO(self.model_path)
+
     def process_image(self, image):
         # image_path = os.path.join(self.image_dir, image_name)
         results = self.model(image)
@@ -130,30 +135,32 @@ class Detection():
             # self.save_detection_results(boxes, image, results[0].orig_img.shape[1], results[0].orig_img.shape[0])
             det_boxes.append(boxes)
             detections = torch.cat(det_boxes)
-            return detections
+            return detections.detach().cpu().to_numpy()
         else:
             pass
 
     # Harvesting
     def det_target(box_det, cam_pos):
         x_cam, y_cam = cam_pos.x, cam_pos.y
-
         if box_det.size() > 0:
             dis_list = []
             for x_det in box_det:
                 x_b, y_b, w_b, h_b = x_det.detach().cpu().numpy()
-                distance = abs(((x_cam - x_b), (y_cam - y_b)))
-                dis_list.append(distance)
-                return min(dis_list)
+                if x_b > x_cam:
+                    continue
+                else:
+                    distance = abs(((x_cam - x_b), (y_cam - y_b)))
+                    dis_list.append(distance)
+                    return min(dis_list)
         else:
             return None
 
 
 # Inference for mapping
-class Mapping():
+class Mapping:
     def __init__(self, model_path):
         self.model_path = model_path
-        self.model = YOLO(self.model_path) 
+        self.model = YOLO(self.model_path)
 
     def mapping(self, image):
         results = self.model(image)
@@ -168,4 +175,4 @@ class Mapping():
                 class_counts[class_id] = 1
 
         # summary = ", ".join(f"{count} {self.model.names[class_id]}" for class_id, count in class_counts.items()) # 2 Flowers, 2 Healthys, 1 Stem_Top, 3 Unhealthys
-        return class_counts # 0:Flower, 1:Healthy, 2:Stem_Top, 3:Unhealthy #Format: {0: 2, 3: 3, 1: 2, 2: 1}
+        return class_counts  # 0:Flower, 1:Healthy, 2:Stem_Top, 3:Unhealthy #Format: {0: 2, 3: 3, 1: 2, 2: 1}
