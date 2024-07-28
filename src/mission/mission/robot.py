@@ -66,9 +66,9 @@ class Robot(Node):
     # Robot arm driver
     # arm = Arm(0x2341, 0x0070)
     models = {
-        "detection": Detection("/home/ubuntu/Documents/final_codes/RoverMaster-ROS2/pre-trained_weights/detection_harvest.pt"),
-        "navigation": NavAlignment("/home/ubuntu/Documents/final_codes/RoverMaster-ROS2/pre-trained_weights/navigation.pt"),
-        "mapping" : Mapping("/home/ubuntu/Documents/final_codes/RoverMaster-ROS2/pre-trained_weights/mapping.pt")
+        "detection": Detection("RoverMaster-ROS2/pre-trained_weights/detection_harvest.pt"),
+        "navigation": NavAlignment("RoverMaster-ROS2/pre-trained_weights/navigation.pt"),
+        "mapping" : Mapping("RoverMaster-ROS2/pre-trained_weights/mapping.pt")
 
     }
 
