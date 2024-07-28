@@ -2,8 +2,13 @@
 import time, math, cv2, sys, numpy as np
 from typing import Callable
 from .transforms import X, Y, Z, rotate_around
-from .utils import radians, degrees
+from math import radians, degrees
 from .arm import Arm
+
+
+def sign(x: float) -> int:
+    return 1 if float(x) >= 0 else -1
+
 
 # ROS2 Related
 import rclpy
@@ -41,6 +46,10 @@ class Robot(Node):
     # Drift compensation
     delta_angle: float = 0
     drift_rate: float = None  # deg/s
+
+    # Multiplier constant for the velocities
+    K_VEL_LINEAR = 1218.0  # mm/s
+    K_VEL_ANGULAR = 180.0  # deg/s
 
     # Latest estimated position, in millimeters
     # Origin is at [TODO]
@@ -108,7 +117,7 @@ class Robot(Node):
             return (angle + 180) % 360 - 180
 
         now = time.time()
-        angle = 360.0 - attitude.angular.z
+        angle = attitude.angular.z
         if self.last_updated_time is not None:
             dt = now - self.last_updated_time
         else:
@@ -144,8 +153,9 @@ class Robot(Node):
         # )
 
     def update_velocity(self, next_velocity: Twist):
-        pass
         self.odm_integrator()
+        self.velocity.linear = next_velocity.linear.x * self.K_VEL_LINEAR
+        self.velocity.angular = next_velocity.angular.z * self.K_VEL_ANGULAR
 
     last_odm_update_time = None  # Milliseconds
 
@@ -159,13 +169,13 @@ class Robot(Node):
             self.position.y += dist * math.sin(radians(self.position.r))
         self.last_odm_update_time = now
 
-    def move_to(self, dst: Position):
+    def move_to(self, dst: Position, speed: float = 200.0):
         """
         Calculates a viable strategy to move from current position to the destination
         Both translation and heading need to be satisfied
         """
-        velocity = 100.0  # mm/s
         distance = dst.x - self.position.x
+        velocity = speed * sign(distance)  # mm/s
         duration = distance / velocity
         self.motion = [Velocity(linear=velocity, angular=0)] * int(
             duration * self.MOTION_FREQ
@@ -185,20 +195,16 @@ class Robot(Node):
         if len(self.motion):
             velocity = self.motion[0]
             self.motion = self.motion[1:]
-            self.get_logger().info(
-                "Setting speed to %f %f" % (velocity.linear, velocity.angular)
-            )
-            vel_msg.linear.x = velocity.linear / 1000.0
-            vel_msg.angular.z = velocity.angular / 360.0
+            vel_msg.linear.x = float(velocity.linear / self.K_VEL_LINEAR)
+            vel_msg.angular.z = float(velocity.angular / self.K_VEL_ANGULAR)
             self.prev_velocity = velocity
         elif self.prev_velocity is not None:
-            vel_msg.linear.x = 0
-            vel_msg.angular.z = 0
+            vel_msg.linear.x = float(0.0)
+            vel_msg.angular.z = float(0.0)
             self.prev_velocity = None
         else:
             return
         self.base_velocity.publish(vel_msg)
-        self.get_logger().info("Setting speed to %f %f" % (vel_msg.linear.x, vel_msg.angular.z))
 
     def __init__(self):
         super().__init__("mission")
@@ -222,7 +228,11 @@ class Robot(Node):
     def wait(self, condition: Callable):
         while rclpy.ok():
             rclpy.spin_once(self)
-            if condition():
+            try:
+                if condition():
+                    return
+            except Exception as e:
+                self.get_logger().error(f"Robot.wait(): error in condition: {e}")
                 return
 
     def take_picture(self) -> np.ndarray:
@@ -246,7 +256,6 @@ class Robot(Node):
         return Position(x=x, y=y, r=0)
 
     def harvest(self, stemp_center):
-        #
         self.arm.move(J1=90, J2=0, J3=J3)
         # init camera position as (0,0)
         camera_position = Position(x=0, y=0, r=0)
@@ -280,23 +289,49 @@ def main(args=None):
     robot = Robot()
     starting_pos = robot.get_parameter("starting_pos").value
     if starting_pos == "L":
-        robot.initial_heading_offset = -90
-    else:
         robot.initial_heading_offset = 90
+    else:
+        robot.initial_heading_offset = -90
     # Init the robot
     robot.get_logger().info("Waiting for heading to be initialized ...")
     robot.wait(lambda: robot.heading_initialized)
+
+    GRID = 645.16
+
+    robot.move_to(Position(x=robot.position.x + GRID, y=robot.position.y, r=0))
+    robot.wait(lambda: len(robot.motion) == 0)
+
+    now = time.time()
+    robot.wait(lambda: time.time() - now > 1.0)
+
+    robot.move_to(Position(x=robot.position.x - GRID, y=robot.position.y, r=0))
+    robot.wait(lambda: len(robot.motion) == 0)
+    # Mission completed, wait for exit signal
+    robot.wait(lambda: False)
+    return
+
     # Wait 5 seconds for precise measurement of sensor drift
     robot.get_logger().info("Measuring sensor drift ...")
     now = time.time()
-    robot.wait(lambda: time.time() - now > 5.0)
-    # First: Move & Turn to estimated initial positionift
-    robot.get_logger().info(f"Moving out of parking slot <{starting_pos}> ...")
+    robot.wait(lambda: time.time() - now > 1.0)
+    # First: Move & Turn to initial position
+    robot.get_logger().info(f"Moving out of parking position <{starting_pos}> ...")
     turn = 90 if starting_pos == "L" else -90
-    robot.motion = [Velocity(linear=100, angular=turn / 5.0)] * 10000
-    robot.get_logger().info("Length of motion: %d" % len(robot.motion))
-    robot.wait(lambda: robot.position.r >= 0 or len(robot.motion) == 0)
+    robot.motion = [Velocity(linear=150, angular=turn / 1.4)] * 10000
+    if starting_pos == "L":
+        robot.wait(lambda: robot.position.r >= -turn / 30 or len(robot.motion) == 0)
+    else:
+        robot.wait(lambda: robot.position.r <= -turn / 30 or len(robot.motion) == 0)
+    robot.motion = []
     robot.get_logger().info("Move completed")
+    now = time.time()
+    robot.wait(lambda: time.time() > now + 1.0)
+    # Second: Move to the starting point
+    robot.move_to(
+        Position(x=robot.position.x + 3.1415926 * 100, y=robot.position.y, r=0)
+    )
+    robot.wait(lambda: robot.motion is None)
+    # Mission completed, wait for exit signal
     robot.wait(lambda: False)
     return
     # ROW A harvesting: Move to each stop points

@@ -18,12 +18,13 @@ static const double V[4][3] = {
     // Motor Layout (UP is forward)
     // 4 2
     // 3 1
-    {1, 0, -1},
-    {1, 0, -1},
-    {1, 0, 1},
-    {1, 0, 1}};
+    {-1, 0, 1},
+    {-1, 0, 1},
+    {-1, 0, -1},
+    {-1, 0, -1}};
 
 #define DSHOT_NEUTRAL 1500
+#define BACKUP_COMP 2
 #define MAX_VELOCITY 100
 static const double max_velocity = MAX_VELOCITY;
 // Single wheel can top to 2 times of the maximum velocity
@@ -73,14 +74,11 @@ private:
     // Map to DSHOT values centered at 1500
     for (int i = 0; i < 4; i++) {
       double cmd_vel = std::round(DSHOT_NEUTRAL + max_velocity * v[i]);
-      clamp(cmd_vel, DSHOT_NEUTRAL - max_velocity * comb_limit,
+      if (cmd_vel < DSHOT_NEUTRAL)
+        cmd_vel -= BACKUP_COMP;
+      clamp(cmd_vel, DSHOT_NEUTRAL - max_velocity * comb_limit - BACKUP_COMP,
             DSHOT_NEUTRAL + max_velocity * comb_limit);
       motor[i] = round(cmd_vel);
-      // // Sanity check
-      ASSERT((motor[i] >= (DSHOT_NEUTRAL - COMB_LIMIT * MAX_VELOCITY)) &&
-                 (motor[i] <= (DSHOT_NEUTRAL + COMB_LIMIT * MAX_VELOCITY)),
-             "Motor " + std::to_string(i) +
-                 " abnormal value: " + std::to_string(motor[i]));
     }
     MultiWii::send<MSP_CMD_SET_MOTOR>(serial_fd, msp_set_motor);
   }

@@ -1,11 +1,14 @@
 import math
 import numpy as np
-from .utils import normalize
 
 X, Y, Z = 0, 1, 2
 
 # epsilon for testing whether a number is close to zero
 _EPS = np.finfo(float).eps * 4.0
+
+
+def normalize(vec: np.ndarray):
+    return vec / np.linalg.norm(vec)
 
 
 def t_from_T(matrix):
