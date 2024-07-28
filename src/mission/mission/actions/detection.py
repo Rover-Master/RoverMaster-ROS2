@@ -149,6 +149,7 @@ class Detection():
             return None
 
 
+# Inference for mapping
 class Mapping():
     def __init__(self, model_path):
         self.model_path = model_path

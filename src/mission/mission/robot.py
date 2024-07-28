@@ -22,7 +22,7 @@ from rclpy.node import Node
 from geometry_msgs.msg import Twist
 
 # Detection
-from .actions.detection import NavAlignment, Detection
+from .actions.detection import NavAlignment, Detection, Mapping
 
 
 class Position:
@@ -77,10 +77,9 @@ class Robot(Node):
 
     # Detection models
     models = {
-        # Initiate detection
-        "detection": Detection(""),
-        # Navigation alignment
-        "navigation": NavAlignment(""),
+        "detection": Detection("RoverMaster-ROS2/pre-trained_weights/detection_harvest.pt"),
+        "navigation": NavAlignment("RoverMaster-ROS2/pre-trained_weights/navigation.pt"),
+        "mapping" : Mapping("RoverMaster-ROS2/pre-trained_weights/mapping.pt")
     }
 
     last_updated_angle = None
@@ -351,6 +350,7 @@ def main(args=None):
         robot.wait(lambda: len(robot.motion) == 0)
 
         # Detect right side stem/find center
+        
         frame_first = robot.take_picture()
         nav_box = robot.navigation.process_image(frame_first)
         if nav_box is not None:
