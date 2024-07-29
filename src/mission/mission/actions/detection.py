@@ -6,6 +6,8 @@ from PIL import Image
 import numpy as np
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
+import datetime
+import matplotlib.patches as patches
 
 
 # Inference Nav
@@ -14,18 +16,17 @@ class NavAlignment:
         self.model_path = model_path
         self.model = YOLO(self.model_path)
 
-    def process_image(self, image):
-        try:
-            results = self.model(image)
-            boxes = results[0].boxes.xywh
-            area = boxes[0][2] * boxes[0][3]
-            if boxes.shape[0] > 0:
-                # self.save_detection_results(boxes, image, results[0].orig_img.shape[1], results[0].orig_img.shape[0])
-                return boxes
-        except Exception as e:
-            pass
-        print(f"Area have not med the criteria: {area}")
-        return None
+    def process_image(self, image, print = lambda msg: None):
+        results = self.model(image)
+        boxes = results[0].boxes.xywh
+        # area = boxes[0,2] * boxes[3]
+        print(str(list(boxes)))
+        if boxes.shape[0] > 0:
+            # self.save_detection_results(boxes, image, results[0].orig_img.shape[1], results[0].orig_img.shape[0])
+            return boxes
+        else:
+            print(f"No boxes can be found")
+            return None
 
     # def prepare_roi(self, image, bbox):
     #     """ Crop and return the ROI from the image based on the bounding box. """
@@ -159,22 +160,57 @@ class Detection:
 
 # Inference for mapping
 class Mapping:
-    def __init__(self, model_path):
+    def __init__(self, model_path, save_dir):
         self.model_path = model_path
         self.model = YOLO(self.model_path)
+        self.save_dir = save_dir
 
-    def mapping(self, image):
+    def mapping(self, image, print = lambda msg: None):
+        h,w = image.shape[0], image.shape[1]
         results = self.model(image)
-        class_counts = {}
+        if results.shape[0] == 0:
+            return None
+        class_counts = {k: 0 for k in range(4)}
+        labels = [int(x) for x in np.rint(results[0].boxes.cls.cpu().numpy())]
+        print(f"labels = {labels}")
+        for label in labels:
+            if label in labels:
+                class_counts[label] += 1
         for box in results[0].boxes:
-            class_id = int(
-                box.data[0][-1]
-            )  # Assuming this is the correct way to get class_id from your results
-            if class_id in class_counts:
-                class_counts[class_id] += 1
-            else:
-                class_counts[class_id] = 1
+            box = box.xywh          
+            x, y, w, h = int(int(box[0][0]) - (int(box[0][2])/2)), int(int(box[0][1]) - (int(box[0][3])/2)), int(box[0][2]), int(box[0][3])
+            cv2.rectangle(image, (x, y), (x + w, y + h), (0, 255, 0), 2)
+        self.save_detection_results(image)
 
-        # summary = ", ".join(f"{count} {self.model.names[class_id]}" for class_id, count in class_counts.items()) # 2 Flowers, 2 Healthys, 1 Stem_Top, 3 Unhealthys
-        return class_counts  
-        # 0:Flower, 1:Healthy, 2:Stem_Top, 3:Unhealthy #Format: {0: 2, 3: 3, 1: 2, 2: 1}
+        summary = ", ".join(f"{count} {self.model.names[class_id] if class_id in self.model.names else "UNKNOWN"}" for class_id, count in class_counts.items()) # 2 Flowers, 2 Healthys, 1 Stem_Top, 3 Unhealthys
+        print(summary)
+        return class_counts  # 0:Flower, 1:Healthy, 2:Stem_Top, 3:Unhealthy #Format: {0: 2, 3: 3, 1: 2, 2: 1}
+    
+    def label_closest(self, image: np.ndarray):
+        h,w = image.shape[0], image.shape[1]
+        results = self.model(image)
+        if results.shape[0] == 0:
+            return None
+        result = results[0]
+        labels = [int(x) for x in np.rint(result.boxes.cls.cpu().numpy())]
+        best_score = None
+        best_label = None
+        for label, box in zip(labels, result.boxes):
+            box = box.xywh[0]
+            x, y = int(box[0]), int(box[1] - image.shape[0] / 2)
+            score = x + abs(y)
+            if best_score is None or score < best_score:
+                best_score = score
+                best_label = label
+        return best_label
+    
+    def save_detection_results(self, image):
+        os.makedirs(self.save_dir, exist_ok=True)
+        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S%f")    
+        filename = f"{timestamp}.jpeg"  
+        save_path = os.path.join(self.save_dir, filename)
+
+        if cv2.imwrite(save_path, image):
+            print(f"Picture saved as {save_path}")
+        else:
+            print("Failed to save picture")

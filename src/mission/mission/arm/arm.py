@@ -2,6 +2,16 @@ import time, sys
 from . import util
 
 
+class DummySerial:
+    is_open: False
+
+    def write(*args, **kwargs):
+        pass
+
+    def recv(*args, **kwargs):
+        pass
+
+
 class Joint:
     ready = False
     moving = True
@@ -37,7 +47,7 @@ class Arm:
         self.send("\nENABLE\n")
 
     def __del__(self):
-        if self.serial is not None:
+        if self.serial is not None and self.serial.is_open:
             self.send("\nDISABLE\n")
             self.serial.close()
 
@@ -195,8 +205,14 @@ class Arm:
                     optimal_duration = duration
         if optimal_angles is None or optimal_duration is None:
             return None, None, None
+        def find_speed(j: Joint, pos: float, duration: float):
+            if abs(duration) <= 1e-3:
+                return j.max_speed
+            dst = abs(j.pos - optimal_angles[j.name])
+            return  dst / optimal_duration
         optimal_speeds = {
-            joint.name: abs(joint.pos - dst) / optimal_duration
-            for joint, dst in zip(self.JOINTS, optimal_angles)
+            j.name: find_speed(j, dst, optimal_duration)
+            for j in self.JOINTS
+            if j.name in optimal_angles
         }
         return optimal_angles, optimal_speeds, optimal_duration

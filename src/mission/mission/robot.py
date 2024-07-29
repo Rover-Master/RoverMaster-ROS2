@@ -2,8 +2,8 @@
 import time, math, cv2, sys, numpy as np
 from typing import Callable
 from .transforms import X, Y, Z, rotate_around
-from math import radians, degrees
-from .arm import Arm
+from math import radians, degrees, sqrt, atan2
+from .arm import Arm, DummySerial
 from .io import OutFile
 from .kinematics import Kinematics
 
@@ -74,15 +74,16 @@ class Robot(Node):
     motion: list[Velocity] = []
 
     # Robot arm driver
-    arm = Arm(0x2341, 0x0070)
+    arm = Arm(serial=DummySerial())
+    # arm = Arm(0x2341, 0x0070)
     # Arm inverse kinematics
     kinematics = Kinematics(L1=170, L2=180, L3=-70)
 
     # Detection models
     models = {
-        "detection": Detection("pre-trained_weights/detection_harvest.pt"),
-        "navigation": NavAlignment("pre-trained_weights/navigation.pt"),
-        "mapping": Mapping("pre-trained_weights/mapping.pt"),
+        "detection": Detection("/home/rover/ROS2WS/pre-trained_weights/detection_harvest.pt"),
+        "navigation": NavAlignment("/home/rover/ROS2WS/pre-trained_weights/navigation.pt"),
+        "mapping": Mapping("/home/rover/ROS2WS/pre-trained_weights/mapping.pt", save_dir="/tmp/"),
     }
 
     last_updated_angle = None
@@ -237,7 +238,7 @@ class Robot(Node):
         self.create_timer(1.0 / self.MOTION_FREQ, self.timed_velocity_update)
         self.create_timer(0.5, self.report_position)
         # initialize the arm
-        self.arm.init()
+        # self.arm.init()
         self.arm.tick = lambda: rclpy.spin_once(self)
         # Prepare the output file for writing
         line = "Plant Number Healthy Unhealthy Stems Flower"
@@ -267,10 +268,12 @@ class Robot(Node):
     def take_picture(self) -> np.ndarray:
         # TODO check the index
         cap = cv2.VideoCapture(0)
+        # cap.set(cv2.CAP_PROP_GAIN, 640)
         ret, frame = cap.read()
         if not ret:
             self.get_logger.info("Capture ret error " + ret)
         cap.release()
+        cv2.imwrite("/tmp/capture.png", frame)
         return frame
 
     def update_arm_camera_position(

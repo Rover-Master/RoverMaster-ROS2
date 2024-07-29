@@ -1,1 +1,1 @@
-from .arm import Arm
+from .arm import Arm, DummySerial

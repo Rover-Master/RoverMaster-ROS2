@@ -9,6 +9,7 @@ def solve(x, y, r, L1, L2, L3) -> tuple[float, float, float] | None:
     j3 = ee - R(radians(r)) @ Vec(L3, 0)
     # Check for feasibility of J3 position
     dist = sqrt(float(np.sum(j3**2)))
+    print("dist =", dist)
     if dist > abs(abs(L1) + abs(L2)):
         return []
     if dist < abs(abs(L1) - abs(L2)):
@@ -19,8 +20,10 @@ def solve(x, y, r, L1, L2, L3) -> tuple[float, float, float] | None:
     # a = L1, b = L2, c = dist
     alpha, beta, gamma = internal_angles(L1, L2, dist)
     # dual solutions
-    solution_a = [delta_r + beta, gamma - 180.0, r - delta_r + alpha]
-    solution_b = [delta_r - beta, 180.0 - gamma, r - delta_r - alpha]
+    def derive(j1, j2) -> list[float]:
+        return [j1, j2, r - j1 - j2]
+    solution_a = derive(delta_r + beta, gamma - 180.0)
+    solution_b = derive(delta_r - beta, 180.0 - gamma)
     return [
         [normalize_angle(r) for r in solution_a],
         [normalize_angle(r) for r in solution_b],
