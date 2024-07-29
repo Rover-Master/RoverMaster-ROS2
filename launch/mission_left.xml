@@ -1,5 +1,7 @@
 <launch>
-  <node pkg="rover_driver" exec="base" namespace="rover"/>
+  <node pkg="rover_driver" exec="base" namespace="rover">
+    <param name="port" value="/dev/ttyACM1"/>
+  </node>
   <node pkg="mission" exec="main" namespace="rover">
     <param name="start_pos" value="L"/>
   </node>

@@ -15,6 +15,9 @@ from geometry_msgs.msg import Twist
 # Detection
 from .actions.detection import NavAlignment, Detection, Mapping
 
+initial_mapping = OutFile("/mount/disk/Initial_Mapping_ABE_Gator.txt")
+final_mapping = OutFile("/mount/disk/Final_Mapping_ABE_Gator.txt")
+
 
 def normalize_angle(angle: float) -> float:
     return (angle + 180) % 360 - 180
@@ -155,7 +158,7 @@ class Robot(Node):
         heading: float,
         angular_vel: float = 20.0,
         linear_vel: float = 0.0,
-        tolerance: float = 0.6,
+        tolerance: float = 2.0,
         timeout: float = 10.0,
     ):
         """aw
@@ -197,6 +200,7 @@ class Robot(Node):
             self.wait(lambda: len(self.motion) == 0)
         # Step 3: turn to the final heading
         self.turn_to(dst.r)
+        self.wait(lambda: self.prev_velocity is None)
         return
 
     prev_velocity: Velocity | None = None
@@ -234,12 +238,12 @@ class Robot(Node):
         self.create_timer(0.5, self.report_position)
         # initialize the arm
         self.arm.init()
+        self.arm.tick = lambda: rclpy.spin_once(self)
         # Prepare the output file for writing
-        self.initial_mapping = OutFile("/mount/disk/Initial_Mapping_ABE_Gator.txt")
-        self.final_mapping = OutFile("/mount/disk/Final_Mapping_ABE_Gator.txt")
-        line = "Plant Number Healthy Unhealthy Stems Flower\n"
-        self.initial_mapping.write(line)
-        self.final_mapping.write(line)
+        line = "Plant Number Healthy Unhealthy Stems Flower"
+        initial_mapping.writeln(line)
+        final_mapping.writeln(line)
+        return
 
     def report_position(self):
         self.get_logger().info(
@@ -264,6 +268,8 @@ class Robot(Node):
         # TODO check the index
         cap = cv2.VideoCapture(0)
         ret, frame = cap.read()
+        if not ret:
+            self.get_logger.info("Capture ret error " + ret)
         cap.release()
         return frame
 
@@ -309,78 +315,131 @@ def main(args=None):
     else:
         robot.position.y = 0
     robot.move_to(Position(x=0, y=0, r=0), speed=200)
-    robot.wait(lambda: len(robot.motion) == 0)
 
     robot.delay(1)
     for row in range(1, 13):
-        robot.move_to(Position(x=robot.position.x + 304.8, y=0, r=0))
-        y_offset = 90  # millimeters
-        robot.arm.speed()
-        robot.arm.move(Z=0)
-        # Sweep left side to locate the plant
-        model_nav: NavAlignment = robot.models["navigation"]
+        try:
+            robot.arm.send("MOVE E=0\n")
+            robot.move_to(Position(x=robot.position.x + 304.8, y=0, r=0))
+            robot.delay(1)
+            continue
+            y_offset = 30  # millimeters
+            # robot.arm.speed()
+            # robot.arm.move(Z=0)
+            # Sweep left side to locate the plant
+            model_nav: NavAlignment = robot.models["navigation"]
 
-        def find_plant(x_range: list[float], y_offset: float, camera_angle: float):
-            detections = []
-            for x in x_range:
-                solutions = robot.kinematics.backward(x, y_offset, camera_angle)
-                angles, speeds, _ = robot.arm.plan(solutions)
-                robot.arm.speed(**speeds)
-                robot.arm.move(**angles)
-                # Camera is now at (x, y_offset, 90 deg)
-                R = rotate_around(Y, 30) @ rotate_around(Z, camera_angle)
-                t = np.array([[x, y_offset, 220]]).T
-                image = robot.take_picture()
-                result = model_nav.process_image(image)
-                if result is not None:
-                    detections.append([result, R, t])
-                if len(detections) >= 2:
-                    break
-            if len(detections) >= 2:
-                (d1, R1, t1), (d2, R2, t2) = detections[:2]
-                # Get R and t from camera 1 to camera 2
-                t = R1.T @ (t2 - t1)
-                R = R2 @ R1.T
-                # Get the position of the plant relative to camera 1
-                relative_position = model_nav.point_reconstruction(d1, d2, R, t)
-                # Get the position of the plant relative to the robot
-                return list((R1 @ relative_position + t1).reshape(-1, 1))
-            else:
-                return None
+            def find_plant(x_range: list[float], y_offset: float, camera_angle: float):
+                detections = []
+                for x in x_range:
+                    solutions = robot.kinematics.backward(x, y_offset, camera_angle)
+                    if len(solutions) == 0:
+                        continue
+                    # angles, speeds, _ = robot.arm.plan(solutions)
+                    # if angles is None or speeds is None:
+                    #     continue
+                    # robot.arm.speed(**speeds)
 
-        offset_detection = 90
-
-        position_left_plant = find_plant(range(-100, 101, 10), y_offset, 90)
-        if position_left_plant is None:
-            robot.get_logger().info(
-                f"Left side plant not found, moving to next position ..."
-            )
-        else:
-            cx, cy, _ = position_left_plant
-            mapping = None
-            for angle in range(0, 361, 45):
-                dx = offset_detection * math.cos(radians(angle))
-                dy = offset_detection * math.sin(radians(angle))
-                solutions = robot.kinematics.backward(cx + dx, cy + dy, angle)
-                angles, speeds, _ = robot.arm.plan(solutions)
-                if angles is not None and speeds is not None:
-                    robot.arm.speed(**speeds)
-                    robot.arm.move(**angles)
+                    robot.get_logger().info(
+                        f"S1={solutions[0]}, S2={solutions[1]}"
+                    )
+                    robot.arm.move(
+                        J1=solutions[1][0], J2=solutions[1][1], J3=solutions[1][2]
+                    )
+                    robot.arm.send("MOVE E=180\n")
+                    # Camera is now at (x, y_offset, 90 deg)
+                    R = rotate_around(Y, 30) @ rotate_around(Z, camera_angle)
+                    t = np.array([[x, y_offset, 220]]).T
                     image = robot.take_picture()
-                    if mapping is None:
-                        mapping = robot.models["mapping"].mapping(image)
-                        robot.initial_mapping.write(f"Plant {row}L {mapping}")
-                    boxes = robot.models["detection"].process_image(image)
-                    if boxes is not None:
-                        box_interest = robot.models["detection"].det_target(boxes, Position(cx, cy, angle))s
-                        
+                    result = model_nav.process_image(image)
+                    if result is not None:
+                        detections.append([result, R, t])
+                    if len(detections) >= 2:
+                        break
+                if len(detections) >= 2:
+                    (d1, R1, t1), (d2, R2, t2) = detections[:2]
+                    # Get R and t from camera 1 to camera 2
+                    t = R1.T @ (t2 - t1)
+                    R = R2 @ R1.T
+                    # Get the position of the plant relative to camera 1
+                    relative_position = model_nav.point_reconstruction(d1, d2, R, t)
+                    # Get the position of the plant relative to the robot
+                    return list((R1 @ relative_position + t1).reshape(-1, 1))
+                else:
+                    return None
 
-        position_right_plant = find_plant(range(-100, 101, 10), -y_offset, -90)
+            offset_detection = 90
 
+            def format_report(mapping: dict[int, int]):
+                return f", {mapping[1]}, {mapping[3]}, {mapping[0]}"
+
+            plant = f"Plant B{row}"
+            robot.arm.send("MOVE E=0\n")
+            position_left_plant = find_plant(range(-150, 151, 30), y_offset, 90)
+            if position_left_plant is None:
+                robot.get_logger().info(
+                    f"Left side plant not found, moving to next position ..."
+                )
+                initial_mapping.writeln(f"{plant} MISSING")
+            else:
+                cx, cy, _ = position_left_plant
+                mapping = None
+                for angle in range(0, 361, 45):
+                    dx = offset_detection * math.cos(radians(angle + 90))
+                    dy = offset_detection * math.sin(radians(angle + 90))
+                    solutions = robot.kinematics.backward(cx + dx, cy + dy, angle)
+                    angles, speeds, _ = robot.arm.plan(solutions)
+                    if angles is not None and speeds is not None:
+                        robot.arm.speed(**speeds)
+                        robot.arm.move(**angles)
+                        image = robot.take_picture()
+                        print("image shape:", image.shape)
+                        if mapping is None:
+                            mapping = robot.models["mapping"].mapping(image)
+                            initial_mapping.writeln(f"{plant} {format_report(mapping)}")
+                            final_mapping.writeln(f"{plant} {format_report(mapping)}")
+                        break
+                        boxes = robot.models["detection"].process_image(image)
+                        if boxes is not None:
+                            box_interest = robot.models["detection"].det_target(
+                                boxes, Position(cx, cy, angle)
+                            )
+            robot.arm.send("MOVE E=0\n")
+            position_right_plant = find_plant(range(-150, 151, 30), -y_offset, -90)
+            plant = f"Plant A{row}"
+            if position_right_plant is None:
+                robot.get_logger().info(
+                    f"Right side plant not found, moving to next position ..."
+                )
+                initial_mapping.writeln(f"{plant} MISSING")
+            else:
+                cx, cy, _ = position_right_plant
+                mapping = None
+                for angle in range(0, 361, 45):
+                    dx = offset_detection * math.cos(radians(angle - 90))
+                    dy = offset_detection * math.sin(radians(angle - 90))
+                    solutions = robot.kinematics.backward(cx + dx, cy + dy, angle)
+                    angles, speeds, _ = robot.arm.plan(solutions)
+                    if angles is not None and speeds is not None:
+                        robot.arm.speed(**speeds)
+                        robot.arm.move(**angles)
+                        image = robot.take_picture()
+                        if mapping is None:
+                            mapping = robot.models["mapping"].mapping(image)
+                            initial_mapping.writeln(f"{plant} {format_report(mapping)}")
+                            final_mapping.writeln(f"{plant} {format_report(mapping)}")
+                        break
+                        boxes = robot.models["detection"].process_image(image)
+                        if boxes is not None:
+                            box_interest = robot.models["detection"].det_target(
+                                boxes, Position(cx, cy, angle)
+                            )
+        except Exception as e:
+            robot.get_logger().info(f"{e}")
+            continue
     robot.get_logger().info(f"Harvesting completed, backing off")
     robot.move_to(Position(x=0, y=robot.position.y, r=0), speed=300)
     robot.move_to(Position(x=-500, y=robot.position.y, r=0), speed=400)
-    robot.wait(lambda: len(robot.motion) == 0)
 
     # Turn to parking spot
     robot.get_logger().info(f"Parking into end position ...")
@@ -393,55 +452,6 @@ def main(args=None):
     # Mission completed, wait for exit signal
     robot.wait(lambda: False)
     return
-    # ROW A harvesting: Move to each stop points
-    for x in [100, 120, 140, 160]:  # TODO unit and measurement
-        robot.move_to(Position(x=x, y=0, r=0))
-        robot.wait(lambda: len(robot.motion) == 0)
-
-        # Detect right side stem/find center
-
-        frame_first = robot.take_picture()
-        nav_box = robot.navigation.process_image(frame_first)
-        if nav_box is not None:
-            # TODO calculate the 3D position
-            robot.arm.move(J3=45)
-            frame_sec = robot.take_picture()
-            good_matches, kp1, kp2 = robot.navigation.detect_and_match_features(
-                frame_first, frame_sec
-            )
-
-            # Visualization confirmation
-            # img_matches = cv2.drawMatches(robot.navigation.prepare_roi(frame_first, robot.navigation.process_image(frame_first)), kp1, robot.navigation.prepare_roi(frame_second, robot.navigation.process_image(frame_second)), kp2, good_matches, None, flags=cv2.DrawMatchesFlags_NOT_DRAW_SINGLE_POINTS)
-            # cv2.imshow("Matches", img_matches)
-            # cv2.waitKey(0)
-            # cv2.destroyAllWindows()
-
-            offset_left: Position = robot.detect(Position(x=x, y=-120, r=0))
-
-        # Harvest
-        robot.harvest(Position(x=x_box_nav, y=y_box_nav, r=0))
-
-        # Mapping
-        # TODO Make an association between specific plant and its corresponding mapping please!
-        robot.navigation.mapping(frame)
-        # Same for right side
-        offset_right: Position = robot.detect(Position(x=x, y=120, r=0))
-        # Correct robot location
-        robot.position = (offset_left + offset_right) / 2
-
-    # Rotate 180 degrees
-
-    # ROW B harvesting: Move to each stop points
-    for x in [160, 140, 120, 100]:  # TODO unit and measurement
-        # TODO: when done ROW A copy behavior/encapsulate in method and call here
-        pass
-
-    # Return to the stop location
-    # TODO
-
-    # write file and move to usb
-    robot.write_solution_file()
-    # TODO move file to USB stick
 
 
 if __name__ == "__main__":

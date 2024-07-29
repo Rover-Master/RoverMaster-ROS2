@@ -2,10 +2,12 @@ class OutFile:
     def __init__(self, path):
         self.path = path
         self._file = open(self.path, "w")
-        return self
 
     def write(self, text):
         self._file.write(text)
+
+    def writeln(self, text):
+        self._file.write(text + "\n")
 
     def writelines(self, *lines):
         self._file.writelines(lines)

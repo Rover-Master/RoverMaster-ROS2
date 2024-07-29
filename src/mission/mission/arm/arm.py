@@ -1,4 +1,4 @@
-import time
+import time, sys
 from . import util
 
 
@@ -21,6 +21,7 @@ class Joint:
 
 
 class Arm:
+    tick = None
     J1, J2, J3, Z = JOINTS = [
         Joint("J1", 30, (-270.0, 270.0)),
         Joint("J2", 60, (-140.0, 140.0)),
@@ -42,6 +43,7 @@ class Arm:
 
     def init(self):
         time.sleep(0.1)
+        self.send(f"MOVE E=0\n")
         self.home(self.J3)
         self.home(self.J2)
         self.move(J2=135)
@@ -49,14 +51,17 @@ class Arm:
 
     def send(self, msg: str):
         print(">>", msg.strip())
-        self.serial.write(bytes(msg, encoding="ASCII"))
+        self.serial.write(msg.encode())
 
     recv_buffer: str = ""
 
     def recv(self):
         msg = self.serial.read_all()
         if msg is not None:
-            self.recv_buffer += str(msg, encoding="ASCII")
+            try:
+                self.recv_buffer += str(msg, encoding="ASCII")
+            except Exception as e:
+                print(e, file=sys.stderr)
         if "\n" in self.recv_buffer:
             line, self.recv_buffer = self.recv_buffer.split("\n", 1)
             print("<<", line.strip())
@@ -122,6 +127,8 @@ class Arm:
         self.send(f"HOME {names}\n")
         while not self.ready(*joints):
             self.handle_message(self.recv())
+            if self.tick is not None:
+                self.tick()
 
     def speed(self, **kwargs: dict[str, float]):
         command = ["SPEED"]
@@ -144,17 +151,25 @@ class Arm:
         self.send(" ".join(command) + "\n")
         while self.moving(*joints_to_move):
             self.handle_message(self.recv())
+            if self.tick is not None:
+                self.tick()
 
     def plan(self, *options: list[list[float | None]]):
         optimal_angles = None
         optimal_duration = None
         for option in options:
+            if len(option) < 3:
+                continue
             duration = 0
             current_option: dict[str, float] = {}
             valid = True
-            for joint, dst in zip(self.JOINTS, option):
+            for joint, dst in [
+                (self.J1, option[0]),
+                (self.J2, option[1]),
+                (self.J3, option[2]),
+            ]:
                 if dst is None:
-                    current_option.append(joint.pos)
+                    current_option[joint.name] = joint.pos
                     continue
                 if joint.range is not None and not joint.infinite:
                     # Validate range

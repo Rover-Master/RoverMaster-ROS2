@@ -15,16 +15,17 @@ class NavAlignment:
         self.model = YOLO(self.model_path)
 
     def process_image(self, image):
-        results = self.model(image)
-        boxes = results[0].boxes.xywh[0]
-        area = boxes[2] * boxes[3]
-        if boxes.shape[0] > 0 and int(area) > 2000:
-            # self.save_detection_results(boxes, image, results[0].orig_img.shape[1], results[0].orig_img.shape[0])
-            return boxes
-
-        else:
-            print(f"Area have not med the criteria: {area}")
-            return None
+        try:
+            results = self.model(image)
+            boxes = results[0].boxes.xywh
+            area = boxes[0][2] * boxes[0][3]
+            if boxes.shape[0] > 0:
+                # self.save_detection_results(boxes, image, results[0].orig_img.shape[1], results[0].orig_img.shape[0])
+                return boxes
+        except Exception as e:
+            pass
+        print(f"Area have not med the criteria: {area}")
+        return None
 
     # def prepare_roi(self, image, bbox):
     #     """ Crop and return the ROI from the image based on the bounding box. """
@@ -175,4 +176,5 @@ class Mapping:
                 class_counts[class_id] = 1
 
         # summary = ", ".join(f"{count} {self.model.names[class_id]}" for class_id, count in class_counts.items()) # 2 Flowers, 2 Healthys, 1 Stem_Top, 3 Unhealthys
-        return class_counts  # 0:Flower, 1:Healthy, 2:Stem_Top, 3:Unhealthy #Format: {0: 2, 3: 3, 1: 2, 2: 1}
+        return class_counts  
+        # 0:Flower, 1:Healthy, 2:Stem_Top, 3:Unhealthy #Format: {0: 2, 3: 3, 1: 2, 2: 1}
