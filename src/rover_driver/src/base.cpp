@@ -18,10 +18,10 @@ static const double V[4][3] = {
     // Motor Layout (UP is forward)
     // 4 2
     // 3 1
-    {-1, 0, 1},
-    {-1, 0, 1},
-    {-1, 0, -1},
-    {-1, 0, -1}};
+    {1, -1, -1},
+    {1, 1, -1},
+    {1, 1, 1},
+    {1, -1, 1}};
 
 #define DSHOT_NEUTRAL 1500
 #define BACKUP_COMP 2

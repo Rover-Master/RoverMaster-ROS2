@@ -51,32 +51,34 @@ def move_arm(x, y, r):
 
 
 def find_plant(x_range: list[float], y_offset: float, camera_angle: float):
-    detections = []
-    for x in x_range:
-        if not move_arm(x, y_offset, camera_angle):
-            continue
-        robot.arm.send("MOVE E=180\n")
-        robot.delay(0.2)
-        # Camera is now at (x, y_offset, 90 deg)
-        R = rotate_around(Y, 30) @ rotate_around(Z, camera_angle)
-        t = np.array([[x, y_offset, 220]]).T
-        image = robot.take_picture()
-        result = model_nav.process_image(image, print=robot.get_logger().info)
-        if result is not None:
-            detections.append([result, R, t])
+    try:
+        detections = []
+        for x in x_range:
+            if not move_arm(x, y_offset, camera_angle):
+                continue
+            robot.arm.send("MOVE E=180\n")
+            robot.delay(0.2)
+            # Camera is now at (x, y_offset, 90 deg)
+            R = rotate_around(Y, 30) @ rotate_around(Z, camera_angle)
+            t = np.array([[x, y_offset, 220]]).T
+            image = robot.take_picture()
+            result = model_nav.process_image(image, print=robot.get_logger().info)
+            if result is not None:
+                detections.append([result, R, t])
+            if len(detections) >= 2:
+                break
         if len(detections) >= 2:
-            break
-    if len(detections) >= 2:
-        (d1, R1, t1), (d2, R2, t2) = detections[:2]
-        # Get R and t from camera 1 to camera 2
-        t = R1.T @ (t2 - t1)
-        R = R2 @ R1.T
-        # Get the position of the plant relative to camera 1
-        relative_position = model_nav.point_reconstruction(d1, d2, R, t)
-        # Get the position of the plant relative to the robot
-        return list((R1 @ relative_position + t1).reshape(-1, 1))
-    else:
-        return None
+            (d1, R1, t1), (d2, R2, t2) = detections[:2]
+            # Get R and t from camera 1 to camera 2
+            t = R1.T @ (t2 - t1)
+            R = R2 @ R1.T
+            # Get the position of the plant relative to camera 1
+            relative_position = model_nav.point_reconstruction(d1, d2, R, t)
+            # Get the position of the plant relative to the robot
+            return list((R1 @ relative_position + t1).reshape(-1, 1))[:2]
+    except Exception as e:
+        robot.get_logger().warn(f"Error: {e}")
+    return None
 
 
 def process_plant(center, mapping, offset=90):
@@ -121,53 +123,46 @@ for row in range(1, 13):
         y_offset = 90  # millimeters
         robot.arm.speed()
         robot.arm.move(Z=0)
-        # Sweep right side to locate the plant
+
+        # Process right side plant
         plant = f"Plant A{row}"
+        robot.get_logger().info(f"Processing {plant}...")
         robot.arm.send("MOVE E=0\n")
         position_right_plant = find_plant(range(-150, 151, 30), -y_offset, -90)
         if position_right_plant is None:
-            robot.get_logger().info(
-                f"Left side plant not found, moving to next position ..."
+            position_right_plant = [0, -300]
+        cx, cy = position_right_plant
+        if move_arm(cx, cy - 90, -90):
+            image = robot.take_picture()
+            mapping = robot.models["mapping"].mapping(
+                image, print=robot.get_logger().info
             )
-            initial_mapping.writeln(f"{plant} MISSING")
-            final_mapping.writeln(f"{plant} MISSING")
+            initial_mapping.writeln(f"{plant}, {format_report(mapping)}")
+            process_plant(Position(cx, cy, 0), mapping)
+            final_mapping.writeln(f"{plant} {format_report(mapping)}")
         else:
-            if move_arm(cx, cy - 90, -90):
-                cx, cy, _ = position_right_plant
-                image = robot.take_picture()
-                mapping = robot.models["mapping"].mapping(
-                    image, print=robot.get_logger().info
-                )
-                initial_mapping.writeln(f"{plant}, {format_report(mapping)}")
-                process_plant(Position(cx, cy, 0), mapping)
-                final_mapping.writeln(f"{plant} {format_report(mapping)}")
-            else:
-                initial_mapping.writeln(f"{plant} FAILED")
-                final_mapping.writeln(f"{plant} FAILED")
+            initial_mapping.writeln(f"{plant} FAILED")
+            final_mapping.writeln(f"{plant} FAILED")
 
+        # Process left side plant
         plant = f"Plant B{row}"
+        robot.get_logger().info(f"Processing {plant}...")
         robot.arm.send("MOVE E=0\n")
         position_left_plant = find_plant(range(-150, 151, 30), y_offset, 90)
-
         if position_left_plant is None:
-            robot.get_logger().info(
-                f"Left side plant not found, moving to next position ..."
+            position_right_plant = [0, 300]
+        cx, cy = position_left_plant
+        if move_arm(cx, cy + 90, 90):
+            image = robot.take_picture()
+            mapping = robot.models["mapping"].mapping(
+                image, print=robot.get_logger().info
             )
-            initial_mapping.writeln(f"{plant} MISSING")
-            final_mapping.writeln(f"{plant} MISSING")
+            initial_mapping.writeln(f"{plant}, {format_report(mapping)}")
+            process_plant(Position(cx, cy, 0), mapping)
+            final_mapping.writeln(f"{plant} {format_report(mapping)}")
         else:
-            if move_arm(cx, cy + 90, 90):
-                cx, cy, _ = position_left_plant
-                image = robot.take_picture()
-                mapping = robot.models["mapping"].mapping(
-                    image, print=robot.get_logger().info
-                )
-                initial_mapping.writeln(f"{plant}, {format_report(mapping)}")
-                process_plant(Position(cx, cy, 0), mapping)
-                final_mapping.writeln(f"{plant} {format_report(mapping)}")
-            else:
-                initial_mapping.writeln(f"{plant} FAILED")
-                final_mapping.writeln(f"{plant} FAILED")
+            initial_mapping.writeln(f"{plant} FAILED")
+            final_mapping.writeln(f"{plant} FAILED")
         continue
         if position_left_plant is not None and position_right_plant is not None:
             center = (position_left_plant + position_right_plant) / 2
@@ -182,7 +177,6 @@ for row in range(1, 13):
 
 robot.arm.move(J1=30, J2=135, J3=0)
 robot.move_to(Position(x=robot.position.x + 500, y=0, r=0))
-robot.get_logger().info(f"Harvesting completed, backing off")
 robot.move_to(Position(x=0, y=robot.position.y, r=0), speed=300)
 robot.move_to(Position(x=-600, y=robot.position.y, r=0), speed=400)
 
@@ -190,7 +184,7 @@ robot.move_to(Position(x=-600, y=robot.position.y, r=0), speed=400)
 robot.get_logger().info(f"Parking into end position ...")
 now = time.time()
 robot.turn_to(
-    -robot.initial_heading, angular_vel=90 / 2.2, linear_vel=-400, tolerance=3.0
+    -robot.initial_heading, angular_vel=90 / 2.4, linear_vel=-400, tolerance=3.0
 )
 robot.get_logger().info(f"Turn completed in {time.time() - now} seconds ...")
 
