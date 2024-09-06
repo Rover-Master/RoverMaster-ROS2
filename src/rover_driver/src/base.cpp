@@ -5,6 +5,7 @@
 
 #include <geometry_msgs/msg/twist.hpp>
 #include <rclcpp/rclcpp.hpp>
+#include <sensor_msgs/msg/imu.hpp>
 #include <thread>
 
 #include "MultiWii/protocol.h"
@@ -43,6 +44,7 @@ private:
     Twist message;
     void publish() { publisher->publish(message); }
   } imu_acc, imu_att;
+  rclcpp::Publisher<sensor_msgs::msg::Imu>::SharedPtr imu_get;
   // Configurations
   std::string port;
   int baud;
@@ -108,6 +110,20 @@ private:
     std::this_thread::sleep_for(1s);
   }
 
+  struct {
+    sensor_msgs::msg::Imu data;
+    bool acc_init = false;
+    bool att_init = false;
+  } imu_status;
+
+  void publish_imu() {
+    if (!imu_status.acc_init || !imu_status.att_init)
+      return;
+    imu_get->publish(imu_status.data);
+    imu_status.acc_init = false;
+    imu_status.att_init = false;
+  }
+
   // Process serial inbound data
   void serial_in() {
     uint8_t c;
@@ -130,6 +146,15 @@ private:
     imu_acc.message.angular.y = data.gyrY;
     imu_acc.message.angular.z = data.gyrZ;
     imu_acc.publish();
+    static const double G = 9.80;
+    imu_status.data.linear_acceleration.x = data.accX * G / 2050.0;
+    imu_status.data.linear_acceleration.y = data.accY * G / 2050.0;
+    imu_status.data.linear_acceleration.z = data.accZ * G / 2050.0;
+    imu_status.data.angular_velocity.x = data.gyrX;
+    imu_status.data.angular_velocity.y = data.gyrY;
+    imu_status.data.angular_velocity.z = data.gyrZ;
+    imu_status.acc_init = true;
+    publish_imu();
   }
 
   void update(MSP_ATTITUDE_t data) {
@@ -137,6 +162,11 @@ private:
     imu_att.message.angular.y = data.angy;
     imu_att.message.angular.z = data.heading;
     imu_att.publish();
+    imu_status.data.orientation.x = data.angx;
+    imu_status.data.orientation.y = data.angy;
+    imu_status.data.orientation.z = data.heading;
+    imu_status.att_init = true;
+    publish_imu();
   }
 
   void serial_out() {
@@ -172,6 +202,7 @@ public:
         });
     imu_acc.publisher = create_publisher<Twist>("base/imu/acc", 10);
     imu_att.publisher = create_publisher<Twist>("base/imu/att", 10);
+    imu_get = create_publisher<sensor_msgs::msg::Imu>("base/imu/get", 10);
     // Timer loop for serial I/O
     timer = create_timer(50ms, [this]() {
       serial_in();
