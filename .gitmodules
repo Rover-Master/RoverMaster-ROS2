@@ -1,0 +1,4 @@
+[submodule "src/slam"]
+	path = src/slam
+	url = git@github.com:uf-focus-lab/ORB_SLAM3_ROS2.git
+	branch = master
