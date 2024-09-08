@@ -1,0 +1,13 @@
+<launch>
+  <node pkg="rover_driver" exec="base" namespace="rover"/>
+  <node pkg="orb_slam3" exec="mono_inertial">
+    <remap from="imu/get" to="/rover/base/imu/get"/>
+  </node>
+  <node pkg="socket_agent" exec="agent">
+    <remap from="vel/get" to="/rover/base/velocity/get"/>
+    <remap from="vel/set" to="/rover/base/velocity/set"/>
+    <remap from="imu/acc" to="/rover/base/imu/acc"/>
+    <remap from="imu/att" to="/rover/base/imu/att"/>
+    <remap from="imu/get" to="/rover/base/imu/get"/>
+  </node>
+</launch>
