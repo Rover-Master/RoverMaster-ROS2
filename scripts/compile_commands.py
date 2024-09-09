@@ -9,6 +9,10 @@
 # This script is supposed to be run from the workspace root.
 # Makefile will automatically run this after build completes.
 # ============================================================
+# Author: Yuxuan Zhang
+# Email : robotics@z-yx.cc
+# License: MIT
+# ============================================================
 
 import json
 from glob import glob

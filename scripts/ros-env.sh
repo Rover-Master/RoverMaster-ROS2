@@ -1,10 +1,13 @@
+# ============================================================
 # This script is used to setup ROS2 environment for the current shell
 # It will source the ROS2 setup.bash file and set bash prompt accordingly.
 # If local environment is not found, it will fallback to global environment.
-# It is intended to be used by ../Makefile. Do not run directly.
+# It is intended to be used by ../Makefile, do not run directly.
+# ============================================================
 # Author: Yuxuan Zhang
 # Email : robotics@z-yx.cc
 # License: MIT
+# ============================================================
 echo -e "\e[90m============================================================\e[0m"
 # Source user environment file, if exists
 if [ -f ~/.bashrc ]; then
