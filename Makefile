@@ -43,7 +43,9 @@ $(LAUNCH_FILES):
 	@ source install/setup.bash && ros2 launch $@
 
 sh shell bash:
-	@ clear; bash --rcfile scripts/bashrc.sh || true
+	@ clear; \
+	  ROS_DISTRO=$(ROS_DISTRO) \
+	  bash --rcfile scripts/ros-env.sh || true
 
 clean:
 	rm -rf build install .cache
