@@ -23,14 +23,15 @@ build/deps:
 	@ rosdep install -i --from-path src --rosdistro $(ROS_DISTRO) -y
 	@ echo $$(date) > build/deps
 
-PACKAGES:=$(shell find src -mindepth 1 -maxdepth 1 -type d)
-$(PACKAGES):
+PACKAGES:=$(shell find . -iname package.xml | xargs scripts/package_name.py)
+$(foreach p,$(PACKAGES),package/$(p)): build/deps
+	$(eval PACKAGE=$(shell basename $@))
 	@ echo
 	@ echo "=================================================="
-	@ echo "Building $@"
+	@ echo "Building package $(PACKAGE)"
 	@ echo "=================================================="
 	@ source $(ROS_SETUP) && \
-	  $(BUILD_ENV) $(COLCON_BUILD_COMMAND) --packages-select $(shell basename $@); \
+	  $(BUILD_ENV) $(COLCON_BUILD_COMMAND) --packages-select $(PACKAGE); \
 	  scripts/compile_commands.py
 
 # enumurate available launch files (for auto completion)

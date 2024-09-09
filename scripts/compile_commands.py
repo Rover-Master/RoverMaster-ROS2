@@ -1,4 +1,4 @@
-#!/usr/bin/python3
+#!/usr/bin/env python3
 # ============================================================
 # This python3 script aggregates all compile_commands.json
 # files from build directories into a single file at the
