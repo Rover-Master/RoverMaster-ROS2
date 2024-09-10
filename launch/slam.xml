@@ -4,7 +4,7 @@
     output='screen'
     emulate_tty="True"
   >
-    <param name="voc_file" value="assets/vocabulary.txt"/>
+    <param name="voc_file" value="assets/vocabulary.bin"/>
     <param name="settings_file" value="assets/mono_inertial.yaml"/>
     <remap from="imu/get" to="/rover/base/imu/get"/>
     <remap from="imu/get" to="/rover/camera/img/get"/>
