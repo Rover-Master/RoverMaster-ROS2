@@ -1,3 +1,4 @@
+#!/bin/bash
 # ============================================================
 # This script is used to setup ROS2 environment for the current shell
 # It will source the ROS2 setup.bash file and set bash prompt accordingly.
@@ -8,7 +9,12 @@
 # Email : robotics@z-yx.cc
 # License: MIT
 # ============================================================
-echo -e "\e[90m============================================================\e[0m"
+DIVIDER="============================================================"
+echo -e "\e[90m${DIVIDER}\e[0m"
+# Display banner (optional)
+if [ ! -z "${BANNER}" ]; then
+    echo -e "\e[34m>>>>>> \e[0;90m \e[0;1;36m${BANNER}\e[0;90m"
+fi
 # Source user environment file, if exists
 if [ -f ~/.bashrc ]; then
     source ~/.bashrc
@@ -22,23 +28,24 @@ if [ -z "$ROS_DISTRO" ]; then
     ROS_DISTRO=$(ls /opt/ros/ | tr ' ' '\n' | tail -n 1)
 fi
 if [ -z "$ROS_DISTRO" ]; then
-    echo -e  "\e[31m[ERROR]\e[0;90m ROS2 installation not found on this system"
-    echo -e  "\e[33m[INFO]\e[0;90m Searched: /opt/ros/"
+    echo -e "\e[31m[ERROR]\e[0;90m ROS2 installation not found on this system"
+    echo -e "\e[32m[INFO] \e[0;90m Searched: /opt/ros/"
     read -n 1 -s -r -p "Press any key to exit..."
     exit 1;
 fi
 # Source ROS2 setup.bash file
-if [ -f install/local_setup.bash ]; then
+if [ -f "install/local_setup.bash" ] && [ -z "${NONLOCAL}" ]; then
     source install/setup.bash
-    echo -e "\e[33m[INFO]\e[0;90m Using global ROS2 environment: $ROS_DISTRO"
+    echo -e "\e[32m[INFO] \e[0;90m Using project local ROS2 environment"
     WS=$PWD
 else
     source /opt/ros/$ROS_DISTRO/setup.bash
-    echo -e "\e[33m[WARN]\e[0;90m Local environment not found."
-    echo -e  "\e[32m[INFO]\e[0;90m Using global ROS2 environment: \e[4m/opt/ros/$ROS_DISTRO\e[0m"
+    if [ -z "${NONLOCAL}" ]; then
+        echo -e "\e[33m[WARN] \e[0;90m Local environment not found."
+        echo -e "\e[32m[INFO] \e[0;90m Using global ROS2 environment: \e[4m/opt/ros/$ROS_DISTRO\e[0m"
+    fi
     WS=/opt/ros/$ROS_DISTRO
 fi
-echo -e "\e[90m============================================================\e[0m"
 # Command to find PWD
 CMD_PWD='$('"pwd | sed 's@^${WS}\?@.@'"')'
 # Rewrite the PS1 prompt to highlight current ROS2 environment
@@ -79,3 +86,11 @@ for file in launch/*; do
     LAUNCH_FILES+="$(basename $file) "
 done
 complete -W "$LAUNCH_FILES" launch
+# Source additional environment files if exists
+for file in *.sh; do
+    if [ -f "$file" ]; then
+        echo -e "\e[33m[INFO] \e[0;90m Sourcing additional env: \e[4m$file\e[0m"
+        source $file
+    fi
+done
+echo -e "\e[90m${DIVIDER}\e[0m"
