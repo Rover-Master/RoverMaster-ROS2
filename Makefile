@@ -7,18 +7,21 @@ BUILD_ENV?=
 BUILD_ENV+= CMAKE_EXPORT_COMPILE_COMMANDS=1
 
 BUILD?=colcon build
-build: build/deps
+all: build/deps
 	@ NONLOCAL=1 $(SETUP_ENV) && \
 	  $(BUILD_ENV) $(BUILD); \
 	  scripts/compile_commands.py
 
 build/deps:
 	@ mkdir -p build
-	@ rosdep install -i --from-path src --rosdistro $(ROS_DISTRO) -y
+	@ NONLOCAL=1 $(SETUP_ENV) && \
+	  rosdep update && \
+	  rosdep install -i --from-path src --rosdistro $${ROS_DISTRO} -y
 	@ echo $$(date) > build/deps
 
-PACKAGES:=$(shell find src -iname package.xml | xargs scripts/package_name.py)
-$(addprefix package/, $(PACKAGES)): build/deps
+PACKAGES:=$(shell scripts/package_name.py)
+PACKAGES:=$(addprefix package/, $(PACKAGES))
+$(PACKAGES): build/deps
 	$(eval PACKAGE=$(shell basename $@))
 	@ NONLOCAL=1 BANNER="Building $(PACKAGE)" $(SETUP_ENV) && \
 	  $(BUILD_ENV) $(BUILD) --packages-select $(PACKAGE); \

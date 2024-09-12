@@ -25,7 +25,7 @@ elif [ -f ~/.profile ]; then
 fi
 # Check for ROS2 installation
 if [ -z "$ROS_DISTRO" ]; then
-    ROS_DISTRO=$(ls /opt/ros/ | tr ' ' '\n' | tail -n 1)
+    export ROS_DISTRO=$(ls /opt/ros/ | tr ' ' '\n' | tail -n 1)
 fi
 if [ -z "$ROS_DISTRO" ]; then
     echo -e "\e[31m[ERROR]\e[0;90m ROS2 installation not found on this system"
