@@ -2,3 +2,7 @@
 	path = src/orb_slam3
 	url = git@github.com:uf-focus-lab/ORB_SLAM3_ROS2.git
 	branch = master
+[submodule "src/spinnaker_camera"]
+	path = src/spinnaker_camera
+	url = git@github.com:uf-focus-lab/Spinnaker-Viewer.git
+	branch = master
