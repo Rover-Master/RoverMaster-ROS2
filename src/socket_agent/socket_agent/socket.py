@@ -23,18 +23,18 @@ class SocketClient:
         self.client = None
         self.logger = logger
 
-    # Debounced error logging (float, seconds)
-    last_report_time: float = 0
+    report_missing_socket = True
 
     def check_socket(self):
         if self.client is not None:
             return True
         # Set the path for the Unix socket
         if not os.path.exists(self.path):
-            if time.time() - self.last_report_time > 10:
+            if self.report_missing_socket:
                 self.logger.info(f"Waiting for socket unix:{self.path}")
-                self.last_report_time = time.time()
+                self.report_missing_socket = False
             return False
+        self.report_missing_socket = True
         # Create the Unix socket server
         self.client = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
         # Set the socket to non-blocking mode
