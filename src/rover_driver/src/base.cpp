@@ -204,7 +204,7 @@ public:
     imu_att.publisher = create_publisher<Twist>("base/imu/att", 10);
     imu_get = create_publisher<sensor_msgs::msg::Imu>("base/imu/get", 10);
     // Timer loop for serial I/O
-    timer = create_timer(50ms, [this]() {
+    timer = create_timer(10ms, [this]() {
       serial_in();
       serial_out();
     });
