@@ -1,6 +1,8 @@
 <launch>
-  <node pkg="rover_driver" exec="base" namespace="rover"/>
-  <node pkg="orb_slam3" exec="mono_inertial" namespace="slam" output='screen' emulate_tty="True">
+  <node pkg="rover_driver" exec="base" namespace="rover">
+    <param name="port" value="/dev/ttyACM1"/>
+  </node>
+   <node pkg="orb_slam3" exec="mono_inertial" namespace="slam" output='screen' emulate_tty="True">
     <param name="voc_file" value="assets/vocabulary.bin"/>
     <param name="settings_file" value="assets/RoverMaster.yaml"/>
     <remap from="imu/get" to="/rover/base/imu/get"/>
@@ -15,4 +17,12 @@
     <remap from="imu/att" to="/rover/base/imu/att"/>
     <remap from="imu/get" to="/rover/base/imu/get"/>
   </node>
+  <!-- Visualization -->
+  <!-- <node pkg="rviz2" exec="rviz2" name="rviz2" output="screen">
+    <param name="use_sim_time" value="true"/>
+    <param name="fixed_frame" value="map"/>
+    <param name="target_frame" value="map"/>
+  </node> -->
+  <!-- Image View -->
+  <node pkg="rqt_image_view" exec="rqt_image_view"/>
 </launch>

@@ -1,9 +1,10 @@
 %YAML:1.0
 ---
+File.version: "1.0"
 Camera.RGB: 1
-Camera.fps: 10
+Camera.type: "PinHole"
+Camera.fps: 24
 Camera.height: 1080
-Camera.type: PinHole
 Camera.width: 1440
 Camera1.cx: 558.600976958302
 Camera1.cy: 562.5573605565277
@@ -13,12 +14,19 @@ Camera1.k1: -0.1745858653654629
 Camera1.k2: 0.11958599785504145
 Camera1.p1: 0.00803052811609127
 Camera1.p2: 0.021486808017018764
-File.version: '1.0'
 IMU.AccWalk: 0.003
-IMU.Frequency: 200.0
 IMU.GyroWalk: 1.0e-05
 IMU.NoiseAcc: 0.004
 IMU.NoiseGyro: 0.00032
+IMU.Frequency: 200.0
+IMU.T_b_c1: !!opencv-matrix
+   rows: 4
+   cols: 4
+   dt: f
+   data: [1., 0., 0., 0.,
+         0., 1., 0., -0.12475,
+        0., 0., 1., -0.202,
+         0.0, 0.0, 0.0, 1.0]
 ORBextractor.iniThFAST: 20
 ORBextractor.minThFAST: 7
 ORBextractor.nFeatures: 2000
