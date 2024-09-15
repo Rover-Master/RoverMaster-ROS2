@@ -1,6 +1,7 @@
 #include <cmath>
 #include <errno.h>
 #include <memory>
+#include <rclcpp/logging.hpp>
 #include <string>
 
 #include <geometry_msgs/msg/twist.hpp>
@@ -87,12 +88,24 @@ private:
 
   void serial_init() {
     // Initialize serial connection
-    declare_parameter("port", "/dev/ttyACM0");
-    declare_parameter("baud", 115200);
-    port = get_parameter("port").as_string();
+    declare_parameter<std::string>("pid", "");
+    declare_parameter<std::string>("vid", "");
+    declare_parameter<int>("baud", 115200);
     baud = get_parameter("baud").as_int();
-    RCLCPP_INFO(get_logger(), "Opening serial port %s, baudrate %d",
-                port.c_str(), baud);
+    const auto vid = get_parameter("vid").as_string();
+    const auto pid = get_parameter("pid").as_string();
+    const std::string name =
+        (vid.empty() ? "----" : vid) + ":" + (pid.empty() ? "----" : pid);
+    const auto ports = serial::locate(vid, pid);
+    if (ports.empty()) {
+      throw std::runtime_error("No serial port found for device " + name);
+    } else if (ports.size() > 1) {
+      RCLCPP_WARN(get_logger(), "Multiple serial ports found for device %s",
+                  name.c_str());
+    }
+    port = ports[0];
+    RCLCPP_INFO(get_logger(), "Opening serial port %s (%s), baudrate %d",
+                port.c_str(), name.c_str(), baud);
     serial_fd = serial::open(port.c_str(), baud);
     if (serial_fd < 0) {
       RCLCPP_ERROR(get_logger(), "Failed to open serial port %s", port.c_str());

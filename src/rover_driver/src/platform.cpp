@@ -6,7 +6,6 @@
 #include <string>
 
 #include <geometry_msgs/msg/twist.hpp>
-#include <opencv2/opencv.hpp>
 #include <rclcpp/rclcpp.hpp>
 #include <std_msgs/msg/float64.hpp>
 #include <thread>
