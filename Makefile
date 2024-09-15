@@ -7,10 +7,18 @@ BUILD_ENV?=
 BUILD_ENV+= CMAKE_EXPORT_COMPILE_COMMANDS=1
 
 BUILD?=colcon build
+
+all: BUILD+=\
+	--cmake-args \
+	-DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+
 all: build/deps
 	@ NONLOCAL=1 $(SETUP_ENV) && \
 	  $(BUILD_ENV) $(BUILD); \
 	  scripts/compile_commands.py
+
+all/symlink: BUILD += --symlink-install
+all/symlink: all
 
 build/deps:
 	@ mkdir -p build
@@ -27,6 +35,14 @@ $(PACKAGES): build/deps
 	  $(BUILD_ENV) $(BUILD) --packages-select $(PACKAGE); \
 	  scripts/compile_commands.py
 
+PACKAGES_LN:=$(addsuffix /symlink, $(PACKAGES))
+$(PACKAGES_LN): BUILD += --symlink-install
+$(PACKAGES_LN): build/deps
+	$(eval PACKAGE=$(shell basename $(shell dirname $@)))
+	@ NONLOCAL=1 BANNER="Building $(PACKAGE)" $(SETUP_ENV) && \
+	  $(BUILD_ENV) $(BUILD) --packages-select $(PACKAGE); \
+	  scripts/compile_commands.py
+
 # enumurate available launch files (for auto completion)
 LAUNCH_FILES:=$(wildcard launch/*)
 $(LAUNCH_FILES):
@@ -36,6 +52,11 @@ sh shell bash:
 	@ clear; \
 	  ROS_DISTRO=$(ROS_DISTRO) \
 	  bash --rcfile scripts/ros-env.sh || true
+
+create:
+	@ NONLOCAL=1 $(SETUP_ENV) && \
+	  scripts/create.sh
+
 
 clean:
 	rm -rf build install .cache
