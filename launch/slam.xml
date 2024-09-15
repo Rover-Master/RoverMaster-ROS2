@@ -1,6 +1,7 @@
 <launch>
   <node pkg="rover_driver" exec="base" namespace="rover">
-    <param name="port" value="/dev/ttyACM1"/>
+    <!-- <param name="vid" type="str" value="0483"/> -->
+    <!-- <param name="pid" type="str" value="5740"/> -->
   </node>
    <node pkg="orb_slam3" exec="mono_inertial" namespace="slam" output='screen' emulate_tty="True">
     <param name="voc_file" value="assets/vocabulary.bin"/>
@@ -24,5 +25,5 @@
     <param name="target_frame" value="map"/>
   </node> -->
   <!-- Image View -->
-  <node pkg="rqt_image_view" exec="rqt_image_view"/>
+  <!-- <node pkg="rqt_image_view" exec="rqt_image_view"/> -->
 </launch>
