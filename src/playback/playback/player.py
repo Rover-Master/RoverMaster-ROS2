@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 import cv2, rclpy
 from std_msgs.msg import Header
-from builtin_interfaces.msg import Time
+from rclpy.time import Time
+from rclpy.node import Node
 from rclpy.publisher import Publisher
 from sensor_msgs.msg import Image, Imu
 from cv_bridge import CvBridge
@@ -11,8 +12,8 @@ import time
 bridge = CvBridge()
 
 
-def header(ns: int) -> Header:
-    return Header(stamp=Time(nanosec=ns))
+def header(ns: int):
+    return Header(stamp=Time(nanoseconds=ns).to_msg())
 
 
 # Message publishers
@@ -80,6 +81,23 @@ def load_csv(path: Path):
             yield line.strip().split(",")
 
 
+def loop(node: Node, tasks):
+    # Align the clock
+    rec_origin = tasks[0][0]
+    sys_origin = time.time_ns()
+    tasks = [(t - rec_origin, f) for t, f in tasks]
+    # Playback all events
+    stat = {}
+    while len(tasks) > 0 and rclpy.ok():
+        ns, task = tasks.pop(0)
+        while sys_origin + ns > time.time_ns():
+            rclpy.spin_once(node, timeout_sec=0)
+        task(ns, stat)
+        # Gather statistics
+        if len(stat) > 0:
+            print(", ".join(f"{k}: {v:8d}" for k, v in stat.items()))
+
+
 # Main
 def main():
     rclpy.init()
@@ -109,20 +127,9 @@ def main():
     tasks.sort(key=lambda t: t[0])
     if len(tasks) == 0:
         raise FileNotFoundError("No tasks found")
-    # Align the clock
-    rec_origin = tasks[0][0]
-    sys_origin = time.time_ns()
-    tasks = [(t - rec_origin, f) for t, f in tasks]
-    # Playback all events
-    stat = {}
-    while len(tasks) > 0 and rclpy.ok():
-        ns, task = tasks.pop(0)
-        while sys_origin + ns > time.time_ns():
-            rclpy.spin_once(node, timeout_sec=0)
-        task(ns, stat)
-        # Gather statistics
-        if len(stat) > 0:
-            node.get_logger().info(", ".join(f"{k}: {v:8d}" for k, v in stat.items()))
+    try:
+        loop(node, tasks)
+    except KeyboardInterrupt:
+        pass
     # Cleanup
     node.destroy_node()
-    rclpy.shutdown()

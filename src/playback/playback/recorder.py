@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 import cv2, rclpy
-from builtin_interfaces.msg import Time
+from rclpy.time import Time
 from rclpy.node import Node
 from sensor_msgs.msg import Image
 from cv_bridge import CvBridge
@@ -16,7 +16,7 @@ class Recorder(Node):
     first_ts: Time | None = None
 
     def callback(self, msg: Image):
-        ts: Time = msg.header.stamp
+        ts = Time.from_msg(msg.header.stamp)
         frame = self.bridge.imgmsg_to_cv2(msg)
         self.get_logger().info(f"Received Image: {msg.header.stamp}")
         # Initialize the video writer
@@ -25,8 +25,8 @@ class Recorder(Node):
             self.first_ts = ts
             return
         elif self.video is None:
-            dt = ts.nanosec - self.first_ts.nanosec
-            if dt <= 0:
+            dt = ts.nanoseconds - self.first_ts.nanoseconds
+            if dt <= 1e-3:
                 dt = 1 / 30
             fps = round(1e9 / dt, 2)
             codec = cv2.VideoWriter_fourcc(*"mp4v")
@@ -61,6 +61,8 @@ class Recorder(Node):
 def main():
     rclpy.init()
     node = Recorder()
-    rclpy.spin(node)
+    try:
+        rclpy.spin(node)
+    except KeyboardInterrupt:
+        pass
     node.destroy_node()
-    rclpy.shutdown()
