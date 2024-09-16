@@ -2,6 +2,8 @@
   <node pkg="playback" exec="player">
     <param name="src" value="var/mav0"/>
     <param name="dst" value="/player"/>
+    <remap from="/player/imu" to="/imu/get"/>
+    <remap from="/player/cam0" to="img/get"/>
   </node>
   <node pkg="playback" exec="recorder">
     <param name="src" value="/slam/tracking_image"/>
@@ -10,8 +12,6 @@
   <node pkg="orb_slam3" exec="mono_inertial" namespace="slam" output='screen' emulate_tty="True">
     <param name="voc_file" value="assets/vocabulary.bin"/>
     <param name="settings_file" value="assets/RoverMaster.yaml"/>
-    <remap from="imu/get" to="/player/imu0"/>
-    <remap from="img/get" to="/player/cam0"/>
   </node>
   <!-- <node pkg="playback" exec="recorder"> 
     <param name="src" value="/player/cam0"/>

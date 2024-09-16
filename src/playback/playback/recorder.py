@@ -17,8 +17,8 @@ class Recorder(Node):
 
     def callback(self, msg: Image):
         ts = Time.from_msg(msg.header.stamp)
-        frame = self.bridge.imgmsg_to_cv2(msg)
-        self.get_logger().info(f"Received Image: {msg.header.stamp}")
+        frame = self.bridge.imgmsg_to_cv2(msg, 'bgr8')
+        self.get_logger().info(f"Received Image: {ts}")
         # Initialize the video writer
         if self.first_frame is None or self.first_ts is None:
             self.first_frame = frame
@@ -29,7 +29,7 @@ class Recorder(Node):
             if dt <= 1e-3:
                 dt = 1 / 30
             fps = round(1e9 / dt, 2)
-            codec = cv2.VideoWriter_fourcc(*"mp4v")
+            codec = cv2.VideoWriter_fourcc(*"mjpg")
             size = self.first_frame.shape[:2][::-1]
             # Log the information
             self.get_logger().info(f"Recording at {fps} FPS and size {size}")
