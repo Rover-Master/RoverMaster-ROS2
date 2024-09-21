@@ -2,20 +2,17 @@
 SHELL:=/bin/bash
 SETUP_ENV:=source scripts/ros-env.sh
 # Build time environment variables
-BUILD_ENV?=
+# For debug build, use `CMAKE_ARGS=-DCMAKE_BUILD_TYPE=Debug make`
+CMAKE_ARGS?=
 # Ask CMake to generate compile_commands.json for each package
-BUILD_ENV+= CMAKE_EXPORT_COMPILE_COMMANDS=1
-
+CMAKE_ARGS+=-DCMAKE_EXPORT_COMPILE_COMMANDS=ON
 BUILD?=colcon build
 
-all: BUILD+=\
-	--cmake-args \
-	-DCMAKE_EXPORT_COMPILE_COMMANDS=ON
-
 all: build/deps
+	$(eval CMD=$(BUILD) --cmake-args $(CMAKE_ARGS))
+	$(info $(CMD))
 	@ NONLOCAL=1 $(SETUP_ENV) && \
-	  $(BUILD_ENV) $(BUILD); \
-	  scripts/compile_commands.py
+	  $(CMD); scripts/compile_commands.py
 
 all/symlink: BUILD += --symlink-install
 all/symlink: all
@@ -31,17 +28,19 @@ PACKAGES:=$(shell scripts/package_name.py)
 PACKAGES:=$(addprefix package/, $(PACKAGES))
 $(PACKAGES): build/deps
 	$(eval PACKAGE=$(shell basename $@))
+	$(eval CMD=$(BUILD) --cmake-args $(CMAKE_ARGS) --packages-select $(PACKAGE))
+	$(info $(CMD))
 	@ NONLOCAL=1 BANNER="Building $(PACKAGE)" $(SETUP_ENV) && \
-	  $(BUILD_ENV) $(BUILD) --packages-select $(PACKAGE); \
-	  scripts/compile_commands.py
+	  $(CMD); scripts/compile_commands.py
 
 PACKAGES_LN:=$(addsuffix /symlink, $(PACKAGES))
 $(PACKAGES_LN): BUILD += --symlink-install
 $(PACKAGES_LN): build/deps
 	$(eval PACKAGE=$(shell basename $(shell dirname $@)))
+	$(eval CMD=$(BUILD) --cmake-args $(CMAKE_ARGS) --packages-select $(PACKAGE))
+	$(info $(CMD))
 	@ NONLOCAL=1 BANNER="Building $(PACKAGE)" $(SETUP_ENV) && \
-	  $(BUILD_ENV) $(BUILD) --packages-select $(PACKAGE); \
-	  scripts/compile_commands.py
+	  $(CMD); scripts/compile_commands.py
 
 # enumurate available launch files (for auto completion)
 LAUNCH_FILES:=$(wildcard launch/*)
@@ -56,7 +55,6 @@ sh shell bash:
 create:
 	@ NONLOCAL=1 $(SETUP_ENV) && \
 	  scripts/create.sh
-
 
 clean:
 	rm -rf build install .cache

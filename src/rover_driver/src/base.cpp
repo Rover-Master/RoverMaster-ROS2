@@ -113,14 +113,11 @@ private:
       throw std::runtime_error("Failed to open serial port " + port + ": " +
                                strerror(errno));
     }
-    std::this_thread::sleep_for(2s);
     serial::flush(serial_fd);
     // Halt all motors (NEUTRAL)
-    std::this_thread::sleep_for(1s);
     memset(&msp_set_motor, 0, sizeof(msp_set_motor));
     double v = 0;
     set_motors(v, v, v);
-    std::this_thread::sleep_for(1s);
   }
 
   struct {
@@ -130,8 +127,8 @@ private:
   } imu_status;
 
   void publish_imu() {
-    if (!imu_status.acc_init || !imu_status.att_init)
-      return;
+    // if (!imu_status.acc_init || !imu_status.att_init)
+    //   return;
     imu_get->publish(imu_status.data);
     imu_status.acc_init = false;
     imu_status.att_init = false;
@@ -152,20 +149,27 @@ private:
 
   // Data handlers
   void update(MSP_RAW_IMU_t data) {
-    imu_acc.message.linear.x = data.accX;
-    imu_acc.message.linear.y = data.accY;
-    imu_acc.message.linear.z = data.accZ;
-    imu_acc.message.angular.x = data.gyrX;
-    imu_acc.message.angular.y = data.gyrY;
-    imu_acc.message.angular.z = data.gyrZ;
+    auto &msg = imu_acc.message;
+    msg.linear.x = -data.accY;
+    msg.linear.y = data.accX;
+    msg.linear.z = data.accZ;
+    msg.angular.x = -data.gyrY;
+    msg.angular.y = data.gyrX;
+    msg.angular.z = data.gyrZ;
+    // Z reading range 510 - 1541
+    // Z value range -G - G
+    // msg.linear.z += (1541.0 + 510.0) / 2.0;
     imu_acc.publish();
-    static const double G = 9.80;
-    imu_status.data.linear_acceleration.x = data.accX * G / 2050.0;
-    imu_status.data.linear_acceleration.y = data.accY * G / 2050.0;
-    imu_status.data.linear_acceleration.z = data.accZ * G / 2050.0;
-    imu_status.data.angular_velocity.x = data.gyrX;
-    imu_status.data.angular_velocity.y = data.gyrY;
-    imu_status.data.angular_velocity.z = data.gyrZ;
+
+    static const double g = 9.80 / 510.0;
+    imu_status.data.linear_acceleration.x = msg.linear.x * g;
+    imu_status.data.linear_acceleration.y = msg.linear.y * g;
+    imu_status.data.linear_acceleration.z = msg.linear.z * g;
+
+    static const double r = 3.1415926 / 180.0;
+    imu_status.data.angular_velocity.x = msg.angular.x * r;
+    imu_status.data.angular_velocity.y = msg.angular.y * r;
+    imu_status.data.angular_velocity.z = msg.angular.z * r;
     imu_status.acc_init = true;
     publish_imu();
   }
@@ -193,7 +197,7 @@ private:
     }
     // Send query for IMU data
     MultiWii::send<MSP_QRY_RAW_IMU>(serial_fd);
-    MultiWii::send<MSP_QRY_ATTITUDE>(serial_fd);
+    // MultiWii::send<MSP_QRY_ATTITUDE>(serial_fd);
   }
 
 public:
