@@ -1,4 +1,4 @@
-name: RoverMaster-ROS2
+name: ROS2
 
 channels:
   - conda-forge
@@ -6,10 +6,21 @@ channels:
   - pypi
 
 dependencies:
-  - python >= 3.10.6
-  - matplotlib
+  # Python Interpreter
+  - python >= 3.12
+  - pip
+
+  # Utilities
+  - tqdm
+  - termcolor
+
+  # Basic algebra and image processing
   - numpy
-  - torch
+  - pillow
+  - opencv
+
+  # Machine learning framework and models
+  - pytorch
   - torchvision
   - ultralytics
-  - pillow
+  - open-clip-torch
