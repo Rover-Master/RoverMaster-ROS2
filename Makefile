@@ -12,7 +12,7 @@ all: build/deps
 	$(eval CMD=$(BUILD) --cmake-args $(CMAKE_ARGS))
 	$(info $(CMD))
 	@ NONLOCAL=1 $(SETUP_ENV) && \
-	  $(CMD); scripts/compile_commands.py
+	  $(CMD); scripts/compiledb.py
 
 all/symlink: BUILD += --symlink-install
 all/symlink: all
