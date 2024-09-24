@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.8)
-project(rover_driver)
+project(rover)
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 set(CMAKE_CXX_STANDARD 20)
@@ -20,19 +20,18 @@ include_directories(
   lib
   ${LIBUDEV_INCLUDE_DIRS}
 )
-# Project Local Library
-file(GLOB LIB_SRCS lib/*/*.cpp)
-
-# Library linkables
 link_libraries(${LIBUDEV_LIBRARIES})
 
-set(NODES base platform)
+file(GLOB SRCS src/*.cpp src/**/*.cpp)
+file(GLOB LIB_SRCS lib/**/*.cpp)
+file(GLOB NODES nodes/*.cpp)
 
 foreach(NODE ${NODES})
-  add_executable(${NODE} src/${NODE}.cpp ${LIB_SRCS})
-  ament_target_dependencies(${NODE} rclcpp std_msgs sensor_msgs)
+  get_filename_component(NODE_NAME ${NODE} NAME)
+  string(REPLACE ".cpp" "" NODE_NAME ${NODE_NAME})
+  add_executable(${NODE_NAME} ${NODE} ${SRCS} ${LIB_SRCS})
+  ament_target_dependencies(${NODE_NAME} rclcpp std_msgs sensor_msgs)
+  install(TARGETS ${NODE_NAME} DESTINATION lib/${PROJECT_NAME})
 endforeach()
-
-install(TARGETS ${NODES} DESTINATION lib/${PROJECT_NAME})
 
 ament_package()
