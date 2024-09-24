@@ -1,6 +1,7 @@
 {
     "cSpell.words": [
         "coeffs",
+        "DSHOT",
         "Eigen",
         "RCLCPP",
         "Sophus"
