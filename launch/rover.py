@@ -6,12 +6,23 @@ nodes = [
     Node(
         package="spinnaker_camera",
         executable="spinnaker_camera",
-        namespace="rover",
+        namespace="spinnaker",
     ),
     Node(
         package="perception",
         executable="ros2",
-        namespace="rover",
+        namespace="perception",
+        remappings=[
+            ("image_in", "/spinnaker/camera_0/img"),
+        ],
+    ),
+    Node(
+        package="playback",
+        executable="recorder",
+        parameters=[
+            {"src": "/perception/image_out"},
+            {"dst": "var/perception.mp4"},
+        ],
     ),
 ]
 

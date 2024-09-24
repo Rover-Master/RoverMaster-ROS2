@@ -1,6 +1,5 @@
 # Change default shell from `sh` to `bash` so we have `source` command available
 SHELL:=/bin/bash
-CLR_ENV:=source scripts/clear-env.sh
 ROS_ENV:=source scripts/ros-env.sh
 # Find system python3 for CMake
 PYTHON3:=$(shell env -i which python3)
@@ -14,8 +13,7 @@ BUILD?=colcon build
 
 all: build/deps
 	$(eval CMD=$(BUILD) --cmake-args $(CMAKE_ARGS))
-	@ $(CLR_ENV) && \
-	  NONLOCAL=1 BANNER="$(CMD)" $(ROS_ENV) && \
+	@ NONLOCAL=1 BANNER="$(CMD)" $(ROS_ENV) && \
 	  $(CMD); scripts/compiledb.py
 
 all/symlink: BUILD += --symlink-install
@@ -23,8 +21,7 @@ all/symlink: all
 
 build/deps:
 	@ mkdir -p build
-	@ $(CLR_ENV) && \
-	  NONLOCAL=1 $(ROS_ENV) && \
+	@ NONLOCAL=1 $(ROS_ENV) && \
 	  rosdep update && \
 	  rosdep install -i \
 			--from-path src \
@@ -48,23 +45,20 @@ $(PACKAGES_LN): build/deps
 	$(eval PACKAGE=$(shell basename $(shell dirname $@)))
 	$(eval CMD=$(BUILD) --cmake-args $(CMAKE_ARGS) --packages-select $(PACKAGE))
 	$(info $(CMD))
-	@ $(CLR_ENV) && \
-	  NONLOCAL=1 BANNER="Building $(PACKAGE)" $(ROS_ENV) && \
+	@ NONLOCAL=1 BANNER="Building $(PACKAGE)" $(ROS_ENV) && \
 	  $(CMD); scripts/compile_commands.py
 
 # enumurate available launch files (for auto completion)
 LAUNCH_FILES:=$(wildcard launch/*)
 $(LAUNCH_FILES):
-	@ $(CLR_ENV) && \
-	  BANNER="Launching $@" $(ROS_ENV) && \
+	@ BANNER="Launching $@" $(ROS_ENV) && \
 		ros2 launch $@
 
 sh shell bash:
 	@ clear && bash --rcfile scripts/shell.sh || true
 
 create:
-	@ $(CLR_ENV) && \
-	  NONLOCAL=1 $(ROS_ENV) && \
+	@ NONLOCAL=1 $(ROS_ENV) && \
 	  scripts/create.sh
 
 clean:
