@@ -10,17 +10,17 @@
     "editor.autoIndent": "advanced",
     "python.envFile": "${workspaceFolder}/scripts/ros-env.sh",
     "python.autoComplete.extraPaths": [
-        "/home/yuxuan/ROS2WS/install/socket_agent/lib/python3.12/site-packages",
-        "/home/yuxuan/ROS2WS/install/player/lib/python3.12/site-packages",
-        "/home/yuxuan/ROS2WS/install/orb_slam3_interfaces/lib/python3.12/site-packages",
-        "/home/yuxuan/ROS2WS/install/mission/lib/python3.12/site-packages",
+        "${workspaceFolder}/install/socket_agent/lib/python3.12/site-packages",
+        "${workspaceFolder}/install/player/lib/python3.12/site-packages",
+        "${workspaceFolder}/install/orb_slam3_interfaces/lib/python3.12/site-packages",
+        "${workspaceFolder}/install/mission/lib/python3.12/site-packages",
         "/opt/ros/jazzy/lib/python3.12/site-packages"
     ],
     "python.analysis.extraPaths": [
-        "/home/yuxuan/ROS2WS/install/socket_agent/lib/python3.12/site-packages",
-        "/home/yuxuan/ROS2WS/install/player/lib/python3.12/site-packages",
-        "/home/yuxuan/ROS2WS/install/orb_slam3_interfaces/lib/python3.12/site-packages",
-        "/home/yuxuan/ROS2WS/install/mission/lib/python3.12/site-packages",
+        "${workspaceFolder}/install/socket_agent/lib/python3.12/site-packages",
+        "${workspaceFolder}/install/player/lib/python3.12/site-packages",
+        "${workspaceFolder}/install/orb_slam3_interfaces/lib/python3.12/site-packages",
+        "${workspaceFolder}/install/mission/lib/python3.12/site-packages",
         "/opt/ros/jazzy/lib/python3.12/site-packages"
     ],
 }
