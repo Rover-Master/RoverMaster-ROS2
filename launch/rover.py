@@ -2,26 +2,15 @@ from launch import LaunchDescription
 from launch_ros.actions import Node
 
 nodes = [
-    Node(package="rover_driver", executable="base", namespace="rover"),
+    Node(package="rover", executable="base", namespace="rover"),
     Node(
-        package="spinnaker_camera",
-        executable="spinnaker_camera",
-        namespace="spinnaker",
-    ),
-    Node(
-        package="perception",
-        executable="ros2",
-        namespace="perception",
+        package="socket_agent",
+        executable="socket_agent",
         remappings=[
-            ("image_in", "/spinnaker/camera_0/img"),
-        ],
-    ),
-    Node(
-        package="playback",
-        executable="recorder",
-        parameters=[
-            {"src": "/perception/image_out"},
-            {"dst": "var/perception.mp4"},
+            ("velocity/get", "/rover/base/velocity/get"),
+            ("velocity/set", "/rover/base/velocity/set"),
+            ("imu", "/rover/base/imu"),
+            ("halt", "/rover/base/halt"),
         ],
     ),
 ]
