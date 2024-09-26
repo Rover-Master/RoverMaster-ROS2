@@ -5,10 +5,10 @@ nodes = [
     Node(package="rover", executable="base", namespace="rover"),
     Node(
         package="socket_agent",
-        executable="socket_agent",
+        executable="agent",
         remappings=[
-            ("velocity/get", "/rover/base/velocity/get"),
-            ("velocity/set", "/rover/base/velocity/set"),
+            ("vel/get", "/rover/base/velocity/get"),
+            ("vel/set", "/rover/base/velocity/set"),
             ("imu", "/rover/base/imu"),
             ("halt", "/rover/base/halt"),
         ],
