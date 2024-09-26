@@ -16,7 +16,8 @@ template <class T> class Message : public T {
   }
 
 public:
-  std::chrono::system_clock::time_point timestamp;
+  std::chrono::system_clock::time_point timestamp =
+      std::chrono::system_clock::now();
   bool updated = false;
   // Reset internal data content to default
   void clear() {

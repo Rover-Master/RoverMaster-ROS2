@@ -133,8 +133,7 @@ BaseDriver::BaseDriver() : Node("Rover_BaseDriver") {
   // Debounced velocity command
   timers.push_back(create_timer(10ms, [this]() {
     if (velocity_io.updated) {
-      auto &msg = velocity_io;
-      motion(msg.linear.x, msg.linear.y, msg.angular.z);
+      motion(velocity_io.linear.x, velocity_io.linear.y, velocity_io.angular.z);
       velocity_io();
       velocity_io.updated = false;
     } else {
@@ -156,10 +155,9 @@ BaseDriver::~BaseDriver() {
 }
 
 void BaseDriver::communicate() {
-  // Serial communication
   const auto raw_packet = device->read();
   if (raw_packet == nullptr)
-    ;
-  else if (raw_packet->is<MSP::RAW_IMU>())
+    return;
+  if (raw_packet->is<MSP::RAW_IMU>())
     update(raw_packet->as<MSP::RAW_IMU>());
 }

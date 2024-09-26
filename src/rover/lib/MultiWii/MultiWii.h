@@ -31,6 +31,7 @@ public:
   static inline const size_t size = sizeof(Payload);
   static inline const uint8_t code = CODE;
   static inline const char *name;
+  Packet() { std::memset(this, 0, sizeof(Payload)); }
 };
 
 extern const char preamble_send[], preamble_recv[];
@@ -116,12 +117,12 @@ public:
     write_and_check(outbuf, Packet::name, Packet::code);
   }
   // Send an action request with payload
-  template <class Packet> void send(Packet p) {
+  template <class Packet> void send(Packet &p) {
     static_assert(
         Packet::type & PacketType::WRITABLE,
         "Protocol does not allow sending this type of packet to device");
     std::vector<uint8_t> outbuf = {'$', 'M', '<', Packet::size, Packet::code};
-    outbuf.reserve(Packet::size + 6);
+    outbuf.reserve(static_cast<size_t>(Packet::size) + 6);
     uint8_t checksum = Packet::size ^ Packet::code;
     const auto &d = reinterpret_cast<uint8_t *>(&p);
     for (uint8_t *p = d; p < d + Packet::size; p++) {
