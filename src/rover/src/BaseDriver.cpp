@@ -130,6 +130,8 @@ BaseDriver::BaseDriver() : Node("Rover_BaseDriver") {
   // Timer loop for serial I/O
   timers.push_back(
       create_timer(50ms, [this]() { device->query<MSP::RAW_IMU>(); }));
+  timers.push_back(
+      create_timer(2000ms, [this]() { device->query<MSP::ANALOG>(); }));
   // Debounced velocity command
   timers.push_back(create_timer(10ms, [this]() {
     if (velocity_io.updated) {
@@ -149,6 +151,8 @@ BaseDriver::BaseDriver() : Node("Rover_BaseDriver") {
 BaseDriver::~BaseDriver() {
   RCLCPP_INFO(get_logger(), "Stopping all motors");
   halt();
+  RCLCPP_INFO(get_logger(), "Resetting device");
+  device->query<MSP::REBOOT>();
   RCLCPP_INFO(get_logger(), "Disconnecting ...");
   std::this_thread::sleep_for(100ms);
   device = nullptr;
@@ -158,6 +162,15 @@ void BaseDriver::communicate() {
   const auto raw_packet = device->read();
   if (raw_packet == nullptr)
     return;
-  if (raw_packet->is<MSP::RAW_IMU>())
-    update(raw_packet->as<MSP::RAW_IMU>());
+  try {
+    if (raw_packet->is<MSP::RAW_IMU>())
+      return update(raw_packet->as<MSP::RAW_IMU>());
+    if (raw_packet->is<MSP::ANALOG>()) {
+      const auto &msg = raw_packet->as<MSP::ANALOG>();
+      double volt = static_cast<double>(msg.vbat) * 0.01;
+      RCLCPP_INFO(get_logger(), "Battery voltage: %.2f V", volt);
+    }
+  } catch (const std::exception &e) {
+    RCLCPP_ERROR(get_logger(), "MSP Error: %s", e.what());
+  }
 }

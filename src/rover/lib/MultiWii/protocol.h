@@ -5,16 +5,18 @@
 
 #include "MultiWii.h"
 
+#define PACKED(name) struct __attribute__((packed)) name
+
 namespace MSP {
 using namespace MultiWii;
 
 // Reboot message contains no payload
 // Call it with query() instead of send()
-struct REBOOT_s {};
+PACKED(REBOOT_s) {};
 
 typedef Packet<68, PacketType::READABLE, REBOOT_s> REBOOT;
 
-struct IDENT_s {
+PACKED(IDENT_s) {
   uint8_t VERSION;
   uint8_t MULTITYPE;
   uint8_t MSP_VERSION;
@@ -23,7 +25,7 @@ struct IDENT_s {
 
 typedef Packet<100, PacketType::READABLE, IDENT_s> IDENT;
 
-struct STATUS_s {
+PACKED(STATUS_s) {
   uint16_t cycleTime;
   uint16_t i2c_errors_count;
   uint16_t sensor;
@@ -33,7 +35,7 @@ struct STATUS_s {
 
 typedef Packet<101, PacketType::READABLE, STATUS_s> STATUS;
 
-struct RAW_IMU_s {
+PACKED(RAW_IMU_s) {
   int16_t accX;
   int16_t accY;
   int16_t accZ;
@@ -47,19 +49,19 @@ struct RAW_IMU_s {
 
 typedef Packet<102, PacketType::READABLE, RAW_IMU_s> RAW_IMU;
 
-struct SERVO_s {
+PACKED(SERVO_s) {
   uint16_t servo[8][2];
 };
 
 typedef Packet<103, PacketType::READABLE, SERVO_s> SERVO;
 
-struct MOTOR_s {
+PACKED(MOTOR_s) {
   uint16_t motor[8];
 };
 
 typedef Packet<104, PacketType::READABLE, MOTOR_s> MOTOR;
 
-struct RC_s {
+PACKED(RC_s) {
   uint16_t ROLL;
   uint16_t PITCH;
   uint16_t YAW;
@@ -80,7 +82,7 @@ struct RC_s {
 
 typedef Packet<105, PacketType::READABLE, RC_s> RC;
 
-struct RAW_GPS_s {
+PACKED(RAW_GPS_s) {
   uint8_t GPS_FIX;
   uint8_t GPS_numSat;
   uint32_t GPS_coord_LAT;
@@ -92,7 +94,7 @@ struct RAW_GPS_s {
 
 typedef Packet<106, PacketType::READABLE, RAW_GPS_s> RAW_GPS;
 
-struct COMP_GPS_s {
+PACKED(COMP_GPS_s) {
   uint16_t GPS_distanceToHome;
   uint16_t GPS_directionToHome;
   uint8_t GPS_update;
@@ -100,7 +102,7 @@ struct COMP_GPS_s {
 
 typedef Packet<107, PacketType::READABLE, COMP_GPS_s> COMP_GPS;
 
-struct ATTITUDE_s {
+PACKED(ATTITUDE_s) {
   int16_t angx;
   int16_t angy;
   int16_t heading;
@@ -108,23 +110,25 @@ struct ATTITUDE_s {
 
 typedef Packet<108, PacketType::READABLE, ATTITUDE_s> ATTITUDE;
 
-struct ALTITUDE_s {
+PACKED(ALTITUDE_s) {
   int32_t EstAlt;
   int16_t vario;
 };
 
 typedef Packet<109, PacketType::READABLE, ALTITUDE_s> ALTITUDE;
 
-struct ANALOG_s {
-  uint8_t vbat;
+PACKED(ANALOG_s) {
+  uint8_t __unused__;
   uint16_t intPowerMeterSum;
   uint16_t rssi;
   uint16_t amperage;
+  // Betaflight Modified Protocol
+  uint16_t vbat; // 0.01V
 };
 
 typedef Packet<110, PacketType::READABLE, ANALOG_s> ANALOG;
 
-struct RC_TUNING_s {
+PACKED(RC_TUNING_s) {
   uint8_t byteRC_RATE;
   uint8_t byteRC_EXPO;
   uint8_t byteRollPitchRate;
@@ -136,7 +140,7 @@ struct RC_TUNING_s {
 
 typedef Packet<111, PacketType::READABLE, RC_TUNING_s> RC_TUNING;
 
-struct PID_s {
+PACKED(PID_s) {
   uint8_t A_ROLL;
   uint8_t A_PITCH;
   uint8_t A_YAW;
@@ -171,11 +175,11 @@ struct PID_s {
 
 typedef Packet<112, PacketType::READABLE, PID_s> PID;
 
-struct BOX_s {};
+PACKED(BOX_s) {};
 
 typedef Packet<113, PacketType::READABLE, BOX_s> BOX;
 
-struct MISC_s {
+PACKED(MISC_s) {
   uint16_t intPowerTrigger1;
   uint16_t conf_minthrottle;
   uint16_t MAXTHROTTLE;
@@ -192,13 +196,13 @@ struct MISC_s {
 
 typedef Packet<114, PacketType::READABLE, MISC_s> MISC;
 
-struct MOTOR_PINS_s {
+PACKED(MOTOR_PINS_s) {
   uint8_t pin[8];
 };
 
 typedef Packet<115, PacketType::READABLE, MOTOR_PINS_s> MOTOR_PINS;
 
-struct SET_RAW_RC_s {
+PACKED(SET_RAW_RC_s) {
   uint16_t ROLL;
   uint16_t PITCH;
   uint16_t YAW;
@@ -219,7 +223,7 @@ struct SET_RAW_RC_s {
 
 typedef Packet<200, PacketType::WRITABLE, SET_RAW_RC_s> SET_RAW_RC;
 
-struct SET_RAW_GPS_s {
+PACKED(SET_RAW_GPS_s) {
   uint8_t GPS_FIX;
   uint8_t GPS_numSat;
   uint32_t GPS_coord_LAT;
@@ -230,7 +234,7 @@ struct SET_RAW_GPS_s {
 
 typedef Packet<201, PacketType::WRITABLE, SET_RAW_GPS_s> SET_RAW_GPS;
 
-struct SET_PID_s {
+PACKED(SET_PID_s) {
   uint8_t A_ROLL;
   uint8_t A_PITCH;
   uint8_t A_YAW;
@@ -265,11 +269,11 @@ struct SET_PID_s {
 
 typedef Packet<202, PacketType::WRITABLE, SET_PID_s> SET_PID;
 
-struct SET_BOX_s {};
+PACKED(SET_BOX_s) {};
 
 typedef Packet<203, PacketType::WRITABLE, SET_BOX_s> SET_BOX;
 
-struct SET_RC_TUNING_s {
+PACKED(SET_RC_TUNING_s) {
   uint8_t byteRC_RATE;
   uint8_t byteRC_EXPO;
   uint8_t byteRollPitchRate;
@@ -281,15 +285,15 @@ struct SET_RC_TUNING_s {
 
 typedef Packet<204, PacketType::WRITABLE, SET_RC_TUNING_s> SET_RC_TUNING;
 
-struct ACC_CALIBRATION_s {};
+PACKED(ACC_CALIBRATION_s) {};
 
 typedef Packet<205, PacketType::WRITABLE, ACC_CALIBRATION_s> ACC_CALIBRATION;
 
-struct MAG_CALIBRATION_s {};
+PACKED(MAG_CALIBRATION_s) {};
 
 typedef Packet<206, PacketType::WRITABLE, MAG_CALIBRATION_s> MAG_CALIBRATION;
 
-struct SET_MISC_s {
+PACKED(SET_MISC_s) {
   uint16_t intPowerTrigger1;
   uint16_t conf_minthrottle;
   uint16_t MAXTHROTTLE;
@@ -306,27 +310,27 @@ struct SET_MISC_s {
 
 typedef Packet<207, PacketType::WRITABLE, SET_MISC_s> SET_MISC;
 
-struct RESET_CONF_s {};
+PACKED(RESET_CONF_s) {};
 
 typedef Packet<208, PacketType::WRITABLE, RESET_CONF_s> RESET_CONF;
 
-struct SET_HEAD_s {
+PACKED(SET_HEAD_s) {
   int16_t magHold;
 };
 
 typedef Packet<211, PacketType::WRITABLE, SET_HEAD_s> SET_HEAD;
 
-struct SET_MOTOR_s {
+PACKED(SET_MOTOR_s) {
   uint16_t motor[8];
 };
 
 typedef Packet<214, PacketType::WRITABLE, SET_MOTOR_s> SET_MOTOR;
 
-struct BIND_s {};
+PACKED(BIND_s) {};
 
 typedef Packet<240, PacketType::WRITABLE, BIND_s> BIND;
 
-struct EEPROM_WRITE_s {};
+PACKED(EEPROM_WRITE_s) {};
 
 typedef Packet<250, PacketType::WRITABLE, EEPROM_WRITE_s> EEPROM_WRITE;
 
