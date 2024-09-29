@@ -6,3 +6,7 @@
 	path = src/perception
 	url = git@github.com:uf-focus-lab/zero-shot-nav.git
 	branch = master
+[submodule "src/lidar"]
+	path = src/lidar
+	url = git@github.com:Slamtec/sllidar_ros2.git
+	branch = master
