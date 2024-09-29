@@ -4,28 +4,30 @@ from rclpy.time import Time
 from rclpy.node import Node
 from sensor_msgs.msg import Image
 from cv_bridge import CvBridge
+from pathlib import Path
 
 
 # Test codecs according to preferences
-for cc in ["avc1", "mp4v", "MJPG", "XVID", "DIVX"]:
-    codec = cv2.VideoWriter_fourcc(*cc)
-    v_test = cv2.VideoWriter("/tmp/test.mp4", codec, 30, (640, 480), isColor=True)
-    success = v_test.isOpened()
-    v_test.release()
-    if success:
-        break
-    else:
-        cc = None
-        codec = None
-
+def VideoWriter(path: str, size: tuple[int, int], fps: float):
+    for cc in ["avc1", "mp4v", "MJPG", "XVID", "DIVX"]:
+        codec = cv2.VideoWriter_fourcc(*cc)
+        video = cv2.VideoWriter(path, codec, fps, size[::-1], isColor=True)
+        if video.isOpened():
+            return video, cc
+        else:
+            video.release()
+    msg = f"No codec available for video {path} of size {size} at {fps} FPS"
+    raise Exception(msg)
 
 class Recorder(Node):
     bridge = CvBridge()
     video = None
-    dst: str
+    dst: Path
 
     first_frame = None
     first_ts: Time | None = None
+
+    counter = 0
 
     def callback(self, msg: Image):
         ts = Time.from_msg(msg.header.stamp)
@@ -35,7 +37,10 @@ class Recorder(Node):
             frame = cv2.cvtColor(frame, cv2.COLOR_GRAY2BGR)
         if frame.shape[2] == 4:
             frame = cv2.cvtColor(frame, cv2.COLOR_BGRA2BGR)
-        self.get_logger().info(f"Frame: {frame.shape} - {ts.nanoseconds / 1e9:.4f}s")
+        self.get_logger().info(f"REC Frame: {frame.shape} @ {ts.nanoseconds / 1e9:.4f}s")
+        cv2.imwrite(str(self.dst / f"{self.counter:06d}.png"), frame)
+        self.counter += 1
+        return
         # Initialize the video writer
         if self.first_frame is None or self.first_ts is None:
             self.first_frame = frame
@@ -48,8 +53,8 @@ class Recorder(Node):
             fps = round(1e9 / dt, 2)
             size = self.first_frame.shape[:2][::-1]
             # Log the information
+            self.video, cc = VideoWriter(self.dst, size, fps)
             self.get_logger().info(f"Recording at {fps} FPS, size {size}, codec {cc}")
-            self.video = cv2.VideoWriter(self.dst, codec, fps, size, isColor=True)
             # Push the first frame
             self.video.write(self.first_frame)
         else:
@@ -62,7 +67,8 @@ class Recorder(Node):
         self.declare_parameter("src", "img")
         self.declare_parameter("dst", "recording.mp4")
         src = str(self.get_parameter("src").value)
-        self.dst = str(self.get_parameter("dst").value)
+        self.dst = Path(str(self.get_parameter("dst").value))
+        self.dst.mkdir(parents=True, exist_ok=True)
         self.get_logger().info(f"Recording from topic {src}")
         self.sub = self.create_subscription(Image, src, self.callback, 10)
         self.get_logger().info(f"Saving to file {self.dst}")

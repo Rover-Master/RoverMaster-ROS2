@@ -22,7 +22,7 @@ nodes = [
         executable="recorder",
         parameters=[
             {"src": "/perception/image_out"},
-            {"dst": "var/perception.mp4"},
+            {"dst": "var/perception"},
         ],
     ),
 ]

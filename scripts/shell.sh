@@ -24,8 +24,6 @@ elif [ -f ~/.profile ]; then
 fi
 # Check for ROS2 installation
 source scripts/ros-env.sh
-# Activate Conda environment if exists
-source scripts/conda-env.sh
 # Command to find PWD
 CMD_PWD='$('"pwd | sed 's@^${ROS_WS}\?@.@'"')'
 # Rewrite the PS1 prompt to highlight current ROS2 environment
