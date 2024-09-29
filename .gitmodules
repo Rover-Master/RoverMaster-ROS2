@@ -10,3 +10,7 @@
 	path = src/lidar
 	url = git@github.com:Slamtec/sllidar_ros2.git
 	branch = master
+[submodule "src/lidar_toolbox"]
+	path = src/lidar_toolbox
+	url = git@github.com:aduvai22/lidar-toolbox.git
+	branch = master
