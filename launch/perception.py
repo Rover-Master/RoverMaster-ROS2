@@ -2,10 +2,18 @@ from launch import LaunchDescription
 from launch_ros.actions import Node
 
 nodes = [
-    Node(package="rover", executable="base", namespace="rover"),
+    Node(
+        package="rover",
+        executable="base",
+        namespace="rover",
+        parameters=[
+            {"vid": "x0483"},
+            {"pid": "x5740"},
+        ],
+    ),
     Node(
         package="spinnaker_camera",
-        executable="spinnaker_camera",
+        executable="capture",
         namespace="spinnaker",
     ),
     Node(
