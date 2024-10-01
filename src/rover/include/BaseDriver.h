@@ -13,7 +13,7 @@ private:
   // MSP inbound receiver
   MultiWii::Device::Ptr device = nullptr;
   // Timeout since last velocity command to halt motors
-  const std::chrono::milliseconds vel_timeout = 1000ms;
+  const std::chrono::milliseconds vel_timeout = 2000ms;
   // Halt flag
   bool halted = false;
   void halt();
