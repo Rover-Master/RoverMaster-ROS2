@@ -32,7 +32,7 @@ public:
       Node *node, std::string topic, int qos = 10,
       std::function<void(Message<T> &)> callback = [](auto) {}) {
     subscribers.push_back(node->create_subscription<T>(
-        topic, qos, [this, callback](T::SharedPtr msg) {
+        topic, qos, [this, callback](typename T::SharedPtr msg) {
           *static_cast<T *>(this) = *msg;
           updated = true;
           timestamp = std::chrono::system_clock::now();
