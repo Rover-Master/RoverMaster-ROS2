@@ -1,4 +1,5 @@
 from launch import LaunchDescription
+from launch.actions import ExecuteProcess
 from launch_ros.actions import Node
 
 nodes = [
@@ -33,6 +34,33 @@ nodes = [
             {"dst": "var/perception"},
         ],
     ),
+    Node(
+        package='sllidar_ros2',
+        executable='sllidar_node',
+        parameters=[{
+            'channel_type':'serial',
+            'serial_port': '/dev/rplidar', 
+            'serial_baudrate': '115200', 
+            'frame_id': 'laser',
+            'inverted': 'false', 
+            'angle_compensate': 'true',
+        }],
+        output='screen'
+    ),
+    Node(
+        package='lidar_toolbox',
+        executable='scan_transformer',
+        output='screen'
+    ),
+    Node(
+        package='lidar_toolbox',
+        executable='proximity',
+        output='screen'
+    ),
+    ExecuteProcess(
+        cmd=['ros2', 'bag', 'record', '-a'],
+        output='screen'
+    )
 ]
 
 

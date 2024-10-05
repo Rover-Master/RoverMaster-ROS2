@@ -7,6 +7,7 @@
 # Email : robotics@z-yx.cc
 # License: MIT
 # ============================================================
+SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 DIVIDER="============================================================"
 echo -e "\e[90m${DIVIDER}\e[0m"
 # Display banner (optional)
@@ -71,4 +72,6 @@ for file in *.sh; do
         source $file
     fi
 done
+# Include runtime bin path
+export PATH="$PATH:$SCRIPT_DIR/runtime-bin"
 echo -e "\e[90m${DIVIDER}\e[0m"
