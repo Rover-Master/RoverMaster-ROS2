@@ -33,16 +33,17 @@ export PS1="${PS1} \[\033[04;32m\]$(basename $ROS_WS)\[\033[00m\]"
 export PS1="${PS1} \[\033[96m\]${CMD_PWD}\[\033[00m\] \$ "
 # Function to launch ROS2 manifests in ./launch/
 function launch() {
-    if [ -f launch/$1 ]; then
-        ros2 launch launch/$1
-    elif [ -f launch/$1.py ]; then
-        ros2 launch launch/$1.py
-    elif [ -f launch/$1.xml ]; then
-        ros2 launch launch/$1.xml
-    elif [ -f launch/$1.yml ]; then
-        ros2 launch launch/$1.yml
-    elif [ -f launch/$1.yaml ]; then
-        ros2 launch launch/$1.yaml
+    LAUNCH=${ROS_WS}/launch
+    if [ -f ${LAUNCH}/$1 ]; then
+        ros2 launch ${LAUNCH}/$1
+    elif [ -f ${LAUNCH}/$1.py ]; then
+        ros2 launch ${LAUNCH}/$1.py
+    elif [ -f ${LAUNCH}/$1.xml ]; then
+        ros2 launch ${LAUNCH}/$1.xml
+    elif [ -f ${LAUNCH}/$1.yml ]; then
+        ros2 launch ${LAUNCH}/$1.yml
+    elif [ -f ${LAUNCH}/$1.yaml ]; then
+        ros2 launch ${LAUNCH}/$1.yaml
     else
         echo "========================"
         if [ -z "$1" ]; then

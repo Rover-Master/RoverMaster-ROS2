@@ -1,7 +1,11 @@
 from launch import LaunchDescription
 from launch.actions import ExecuteProcess
 from launch_ros.actions import Node
-
+from os import environ as env
+from pathlib import Path
+run_id = "TODO"
+PWD = Path(env['PWD'])
+RUN_VAR = Path(PWD) / 'var' / run_id
 nodes = [
     Node(
         package="rover",
@@ -31,7 +35,7 @@ nodes = [
         executable="recorder",
         parameters=[
             {"src": "/perception/image_out"},
-            {"dst": "var/perception"},
+            {"dst": RUN_VAR},
         ],
     ),
     Node(
@@ -40,10 +44,10 @@ nodes = [
         parameters=[{
             'channel_type':'serial',
             'serial_port': '/dev/rplidar', 
-            'serial_baudrate': '115200', 
+            'serial_baudrate': 115200, 
             'frame_id': 'laser',
-            'inverted': 'false', 
-            'angle_compensate': 'true',
+            'inverted': False, 
+            'angle_compensate': True,
         }],
         output='screen'
     ),
@@ -58,9 +62,16 @@ nodes = [
         output='screen'
     ),
     ExecuteProcess(
-        cmd=['ros2', 'bag', 'record', '-a'],
+        cmd=[
+            *['ros2', 'bag', 'record', '-o', RUN_VAR],
+            '/scan_transformed',
+            '/rover/base/velocity/get',
+            '/rover/base/halt'
+        ],
+        cwd=str(PWD / 'var'),
         output='screen'
     )
+    # TODO: Run FFMPEG video encoder upon completion
 ]
 
 
