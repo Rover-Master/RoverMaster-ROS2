@@ -1,8 +1,9 @@
 from launch import LaunchDescription
-from launch.actions import ExecuteProcess, RegisterEventHandler
+from launch.actions import ExecuteProcess, RegisterEventHandler, LogInfo
 from launch.event_handlers import OnShutdown
 from launch.events import Shutdown
 from launch_ros.actions import Node
+from launch.substitutions import LocalSubstitution
 from os import environ as env
 from pathlib import Path
 from datetime import datetime
@@ -80,7 +81,11 @@ nodes = [
     # Define an event handler to run the encode-video script on shutdown
     RegisterEventHandler(
         event_handler=OnShutdown(
-            on_shutdown=[
+            on_shutdown=[LogInfo(
+                            msg=['Launch was asked to shutdown: ',
+                                LocalSubstitution('event.reason')
+                            ]
+                        ),
                 ExecuteProcess(
                     cmd=[str(PWD / 'scripts/runtime-bin/encode-video'), RUN_VAR+"/perception_images"],
                     cwd=str(PWD),
