@@ -1,11 +1,16 @@
 from launch import LaunchDescription
-from launch.actions import ExecuteProcess
+from launch.actions import ExecuteProcess, RegisterEventHandler
+from launch.event_handlers import OnShutdown
+from launch.events import Shutdown
 from launch_ros.actions import Node
 from os import environ as env
 from pathlib import Path
-run_id = "TODO"
+from datetime import datetime
+
+
+run_id = datetime.now().strftime('%Y%m%d_%H%M%S')
 PWD = Path(env['PWD'])
-RUN_VAR = Path(PWD) / 'var' / run_id
+RUN_VAR = str(PWD / 'var' / run_id)
 nodes = [
     Node(
         package="rover",
@@ -35,7 +40,7 @@ nodes = [
         executable="recorder",
         parameters=[
             {"src": "/perception/image_out"},
-            {"dst": RUN_VAR},
+            {"dst": RUN_VAR + "/perception_images"},
         ],
     ),
     Node(
@@ -70,10 +75,23 @@ nodes = [
         ],
         cwd=str(PWD / 'var'),
         output='screen'
-    )
-    # TODO: Run FFMPEG video encoder upon completion
-]
+    ),
 
+    # Define an event handler to run the encode-video script on shutdown
+    RegisterEventHandler(
+        event_handler=OnShutdown(
+            on_shutdown=[
+                ExecuteProcess(
+                    cmd=[str(PWD / 'scripts/runtime-bin/encode-video'), RUN_VAR+"/perception_images"],
+                    cwd=str(PWD),
+                    shell=True,
+                    output='screen'
+                )
+            ]
+        )
+    ),
+
+]
 
 def generate_launch_description():
     return LaunchDescription(nodes)
