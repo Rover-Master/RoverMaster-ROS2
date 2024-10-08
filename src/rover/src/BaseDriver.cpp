@@ -75,14 +75,15 @@ std::string hex_string(std::string s) {
 }
 
 // Data handlers
-void BaseDriver::update(MSP::RAW_IMU data) {
-  auto &msg = imu_out;
-  data.accY *= -1;
+void BaseDriver::update(MSP::RAW_IMU data,
+                        std::chrono::system_clock::time_point timestamp) {
   data.accX *= 1;
+  data.accY *= -1;
   data.accZ *= 1;
-  data.gyrY *= -1;
   data.gyrX *= 1;
+  data.gyrY *= -1;
   data.gyrZ *= 1;
+  auto &msg = imu_out;
   static const double g = 9.80 / 510.0;
   msg.linear_acceleration.x = data.accX * g;
   msg.linear_acceleration.y = data.accY * g;
@@ -91,7 +92,52 @@ void BaseDriver::update(MSP::RAW_IMU data) {
   msg.angular_velocity.x = data.gyrX * r;
   msg.angular_velocity.y = data.gyrY * r;
   msg.angular_velocity.z = data.gyrZ * r;
-  msg();
+  msg.header.stamp.sec =
+      std::chrono::time_point_cast<std::chrono::seconds>(timestamp)
+          .time_since_epoch()
+          .count();
+  msg.header.stamp.nanosec =
+      std::chrono::time_point_cast<std::chrono::nanoseconds>(timestamp)
+          .time_since_epoch()
+          .count() %
+      1000000000UL;
+  imu_status.acc_updated = true;
+  if (imu_status.updated()) {
+    imu_status.reset();
+    msg();
+  }
+}
+
+#define deg2rad(deg) (static_cast<double>(deg) * 3.1415926 / 180.0)
+// Data handlers
+void BaseDriver::update(MSP::ATTITUDE data,
+                        std::chrono::system_clock::time_point timestamp) {
+  const double x = deg2rad(data.angx / 10.0);   // roll
+  const double y = deg2rad(-data.angy / 10.0);  // pitch
+  const double z = deg2rad(data.heading / 1.0); // yaw
+  // Convert to quaternion
+  const double cx = cos(x / 2), sx = sin(x / 2);
+  const double cy = cos(y / 2), sy = sin(y / 2);
+  const double cz = cos(z / 2), sz = sin(z / 2);
+  auto &msg = imu_out;
+  msg.orientation.w = cx * cy * cz + sx * sy * sz;
+  msg.orientation.x = sx * cy * cz - cx * sy * sz;
+  msg.orientation.y = cx * sy * cz + sx * cy * sz;
+  msg.orientation.z = cx * cy * sz - sx * sy * cz;
+  imu_status.att_updated = true;
+  msg.header.stamp.sec =
+      std::chrono::time_point_cast<std::chrono::seconds>(timestamp)
+          .time_since_epoch()
+          .count();
+  msg.header.stamp.nanosec =
+      std::chrono::time_point_cast<std::chrono::nanoseconds>(timestamp)
+          .time_since_epoch()
+          .count() %
+      1000000000UL;
+  if (imu_status.updated()) {
+    imu_status.reset();
+    msg();
+  }
 }
 
 BaseDriver::BaseDriver() : Node("Rover_BaseDriver") {
@@ -112,9 +158,9 @@ BaseDriver::BaseDriver() : Node("Rover_BaseDriver") {
                 name.c_str());
   }
   const auto port = ports[0];
-  RCLCPP_INFO(get_logger(), "Opening serial port %s (%s), baudrate %d",
-              port.c_str(), name.c_str(), baud);
-  device = std::make_unique<MultiWii::Device>(port, baud);
+  RCLCPP_INFO(get_logger(), "Opening serial port %s (%s:%s), baudrate %d",
+              port.path.c_str(), port.vid.c_str(), port.pid.c_str(), baud);
+  device = std::make_unique<MultiWii::Device>(port.path, baud);
   // Halt all motors at startup (NEUTRAL)
   halt();
   // Initialize topics
@@ -128,8 +174,12 @@ BaseDriver::BaseDriver() : Node("Rover_BaseDriver") {
   velocity_io.publish(this, "base/velocity/get");
   imu_out.publish(this, "base/imu");
   // Timer loop for serial I/O
-  timers.push_back(
-      create_timer(50ms, [this]() { device->query<MSP::RAW_IMU>(); }));
+  timers.push_back(create_timer(50ms, [this]() {
+    if (imu_status.query())
+      device->query<MSP::RAW_IMU>();
+    else
+      device->query<MSP::ATTITUDE>();
+  }));
   timers.push_back(
       create_timer(2000ms, [this]() { device->query<MSP::ANALOG>(); }));
   // Debounced velocity command
@@ -164,7 +214,9 @@ void BaseDriver::communicate() {
     return;
   try {
     if (raw_packet->is<MSP::RAW_IMU>())
-      return update(raw_packet->as<MSP::RAW_IMU>());
+      return update(raw_packet->as<MSP::RAW_IMU>(), raw_packet->timestamp);
+    if (raw_packet->is<MSP::ATTITUDE>())
+      return update(raw_packet->as<MSP::ATTITUDE>(), raw_packet->timestamp);
     if (raw_packet->is<MSP::ANALOG>()) {
       const auto &msg = raw_packet->as<MSP::ANALOG>();
       double volt = static_cast<double>(msg.vbat) * 0.01;

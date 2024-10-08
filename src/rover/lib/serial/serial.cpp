@@ -85,11 +85,11 @@ int serial::readline(int fd, char **cursor, char *const line_ep,
 
 #include <libudev.h>
 
-std::vector<std::string> serial::locate(std::string vid, std::string pid) {
+std::vector<serial::PortInfo> serial::locate(std::string vid, std::string pid) {
   struct udev *udev = udev_new();
   if (!udev)
     throw std::runtime_error("udev instance cannot be created");
-  std::vector<std::string> ports;
+  std::vector<serial::PortInfo> ports;
   struct udev_enumerate *enumerate = udev_enumerate_new(udev);
   udev_enumerate_add_match_subsystem(enumerate, "tty");
   udev_enumerate_scan_devices(enumerate);
@@ -110,7 +110,8 @@ std::vector<std::string> serial::locate(std::string vid, std::string pid) {
         continue;
       if (!pid.empty() && pid != device_pid)
         continue;
-      ports.push_back(udev_device_get_devnode(dev));
+      ports.push_back(serial::PortInfo{udev_device_get_devnode(dev), device_vid,
+                                       device_pid});
     }
     udev_device_unref(dev);
   }

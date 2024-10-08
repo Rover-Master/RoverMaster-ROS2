@@ -7,6 +7,7 @@
 #include <std_msgs/msg/bool.hpp>
 
 using namespace std::chrono_literals;
+using time_point = std::chrono::system_clock::time_point;
 // ROS2 Node
 using Node = rclcpp::Node;
 // ROS2 Timer

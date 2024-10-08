@@ -4,7 +4,8 @@
 #include <vector>
 
 #include <rclcpp/rclcpp.hpp>
-using Node = rclcpp::Node;
+
+#include "Types.h"
 
 template <class T> class Message : public T {
   template <typename V> V filter_out(std::string name, V vector) {
@@ -16,8 +17,7 @@ template <class T> class Message : public T {
   }
 
 public:
-  std::chrono::system_clock::time_point timestamp =
-      std::chrono::system_clock::now();
+  time_point timestamp = std::chrono::system_clock::now();
   bool updated = false;
   // Reset internal data content to default
   void clear() {

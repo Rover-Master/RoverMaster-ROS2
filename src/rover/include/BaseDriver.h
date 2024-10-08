@@ -2,7 +2,6 @@
 #include "Types.h"
 
 #include "MultiWii/protocol.h"
-#include <chrono>
 
 class BaseDriver : public Node {
 private:
@@ -19,11 +18,18 @@ private:
   void halt();
   void motion(double vx, double vy, double vr);
   struct {
-    sensor_msgs::msg::Imu data;
-    bool acc_init = false;
-    bool att_init = false;
+    uint8_t counter = 0;
+    bool acc_updated = false;
+    bool att_updated = false;
+    inline bool query() {
+      counter = (counter + 1) % 2;
+      return counter == 0;
+    }
+    inline bool updated() { return acc_updated && att_updated; }
+    inline void reset() { acc_updated = att_updated = false; }
   } imu_status;
-  void update(MSP::RAW_IMU data);
+  void update(MSP::RAW_IMU data, time_point timestamp);
+  void update(MSP::ATTITUDE data, time_point timestamp);
 
 public:
   BaseDriver();
