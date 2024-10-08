@@ -7,6 +7,7 @@ from launch.substitutions import LocalSubstitution
 from os import environ as env
 from pathlib import Path
 from datetime import datetime
+import os
 
 
 run_id = datetime.now().strftime('%Y%m%d_%H%M%S')
@@ -79,24 +80,43 @@ nodes = [
     ),
 
     # Define an event handler to run the encode-video script on shutdown
-    RegisterEventHandler(
-        event_handler=OnShutdown(
-            on_shutdown=[LogInfo(
-                            msg=['Launch was asked to shutdown: ',
-                                LocalSubstitution('event.reason')
-                            ]
-                        ),
-                ExecuteProcess(
-                    cmd=[str(PWD / 'scripts/runtime-bin/encode-video'), RUN_VAR+"/perception_images"],
-                    cwd=str(PWD),
-                    shell=True,
-                    output='screen'
-                )
-            ]
-        )
-    ),
+    # RegisterEventHandler(
+    #     OnShutdown(
+    #         on_shutdown=[
+    #             LogInfo(msg="Shutting down... Executing the encode-video script."),
+    #             ExecuteProcess(
+    #                 cmd=[
+    #                     str(PWD / 'scripts/runtime-bin/encode-video'),
+    #                     RUN_VAR + "/perception_images"
+    #                 ],
+    #                 cwd=str(PWD),
+    #                 shell=True,
+    #                 output='screen'
+    #             )
+    #         ]
+    #     )
+    # )
 
 ]
+
+# Define a custom shutdown callback function to use os.system
+def shutdown_callback(event, context):
+    """Function to be called on shutdown."""
+    script_path = str(PWD / 'scripts/runtime-bin/encode-video')
+    os.system(f"{script_path} {RUN_VAR}/perception_images")
+    return [LogInfo(msg="Shutdown callback executed. Video encoding started.")]
+
+# Create the event handler for shutdown
+shutdown_handler = RegisterEventHandler(
+    OnShutdown(
+        on_shutdown=shutdown_callback
+    )
+)
+
+# Include the shutdown handler in the nodes list
+nodes.append(shutdown_handler)
+
+
 
 def generate_launch_description():
     return LaunchDescription(nodes)
