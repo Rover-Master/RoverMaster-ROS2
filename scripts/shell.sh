@@ -8,6 +8,7 @@
 # License: MIT
 # ============================================================
 SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
+PROJECT_HOME=$(dirname $SCRIPT_DIR)
 DIVIDER="============================================================"
 echo -e "\e[90m${DIVIDER}\e[0m"
 # Display banner (optional)
@@ -33,7 +34,7 @@ export PS1="${PS1} \[\033[04;32m\]$(basename $ROS_WS)\[\033[00m\]"
 export PS1="${PS1} \[\033[96m\]${CMD_PWD}\[\033[00m\] \$ "
 # Function to launch ROS2 manifests in ./launch/
 function launch() {
-    LAUNCH=${ROS_WS}/launch
+    LAUNCH=${PROJECT_HOME}/launch
     if [ -f ${LAUNCH}/$1 ]; then
         ros2 launch ${LAUNCH}/$1
     elif [ -f ${LAUNCH}/$1.py ]; then
@@ -50,7 +51,7 @@ function launch() {
             echo "Usage: launch <file>"
             echo "========================"
         else
-            echo "File not found: $1"
+            echo "File not found: ${LAUNCH}/$1"
             echo "========================"
         fi
         echo "Available launch files:"
