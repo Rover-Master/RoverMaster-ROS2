@@ -23,5 +23,5 @@ __pycache__
 *.socket
 
 # Outputs
-var/
+var
 *.osa
