@@ -7,12 +7,16 @@ if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
   add_compile_options(-Wall -Wextra -Wpedantic)
 endif()
 
+
 find_package(PkgConfig REQUIRED)
 find_package(ament_cmake REQUIRED)
-find_package(rclcpp REQUIRED)
-find_package(std_msgs REQUIRED)
-find_package(sensor_msgs REQUIRED)
+
+set(DEPS rclcpp std_msgs sensor_msgs nav_msgs geometry_msgs)
+foreach(DEP ${DEPS})
+  find_package(${DEP} REQUIRED)
+endforeach()
 find_package(Threads REQUIRED)
+
 pkg_check_modules(LIBUDEV REQUIRED libudev)
 
 include_directories(
@@ -30,7 +34,7 @@ foreach(NODE ${NODES})
   get_filename_component(NODE_NAME ${NODE} NAME)
   string(REPLACE ".cpp" "" NODE_NAME ${NODE_NAME})
   add_executable(${NODE_NAME} ${NODE} ${SRCS} ${LIB_SRCS})
-  ament_target_dependencies(${NODE_NAME} rclcpp std_msgs sensor_msgs)
+  ament_target_dependencies(${NODE_NAME} ${DEPS})
   install(TARGETS ${NODE_NAME} DESTINATION lib/${PROJECT_NAME})
 endforeach()
 

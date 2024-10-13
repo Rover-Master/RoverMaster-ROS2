@@ -1,5 +1,7 @@
 #include <chrono>
 #include <cmath>
+#include <rcl/time.h>
+#include <rclcpp/time.hpp>
 
 #include "BaseDriver.h"
 
@@ -30,12 +32,21 @@ void BaseDriver::halt() {
   for (size_t i = 0; i < (sizeof(command.motor) / sizeof(*command.motor)); i++)
     command.motor[i] = DSHOT_NEUTRAL;
   device->send(command);
+  odom_out.twist.twist.linear.x = 0;
+  odom_out.twist.twist.linear.y = 0;
+  odom_out.twist.twist.linear.z = 0;
+  integrate_odometry();
+  odom_out();
 }
 
 // Velocity command
 void BaseDriver::motion(double vx, double vy, double vr) {
   if (halted)
     return;
+  integrate_odometry();
+  odom_out.twist.twist.linear.x = vx * odom_k_linear;
+  odom_out.twist.twist.linear.y = vy * odom_k_linear;
+  odom_out();
   MSP::SET_MOTOR command;
   auto &motor = command.motor;
   clamp(vx, -1.0, 1.0);
@@ -92,19 +103,12 @@ void BaseDriver::update(MSP::RAW_IMU data,
   msg.angular_velocity.x = data.gyrX * r;
   msg.angular_velocity.y = data.gyrY * r;
   msg.angular_velocity.z = data.gyrZ * r;
-  msg.header.stamp.sec =
-      std::chrono::time_point_cast<std::chrono::seconds>(timestamp)
-          .time_since_epoch()
-          .count();
-  msg.header.stamp.nanosec =
-      std::chrono::time_point_cast<std::chrono::nanoseconds>(timestamp)
-          .time_since_epoch()
-          .count() %
-      1000000000UL;
+  odom_out.twist.twist.angular = msg.angular_velocity;
+  SET_ROS_STAMP(msg, timestamp);
   imu_status.acc_updated = true;
   if (imu_status.updated()) {
-    imu_status.reset();
     msg();
+    imu_status.reset();
   }
 }
 
@@ -124,20 +128,45 @@ void BaseDriver::update(MSP::ATTITUDE data,
   msg.orientation.x = sx * cy * cz - cx * sy * sz;
   msg.orientation.y = cx * sy * cz + sx * cy * sz;
   msg.orientation.z = cx * cy * sz - sx * sy * cz;
+  odom_out.pose.pose.orientation = msg.orientation;
+  integrate_odometry(z);
+  odom_out();
+  SET_ROS_STAMP(msg, timestamp);
   imu_status.att_updated = true;
-  msg.header.stamp.sec =
-      std::chrono::time_point_cast<std::chrono::seconds>(timestamp)
-          .time_since_epoch()
-          .count();
-  msg.header.stamp.nanosec =
-      std::chrono::time_point_cast<std::chrono::nanoseconds>(timestamp)
-          .time_since_epoch()
-          .count() %
-      1000000000UL;
   if (imu_status.updated()) {
-    imu_status.reset();
     msg();
+    imu_status.reset();
   }
+}
+
+void BaseDriver::integrate_odometry() {
+  if (std::isnan(odom_last_heading))
+    return;
+  integrate_odometry(odom_last_heading);
+}
+
+void BaseDriver::integrate_odometry(double current_heading) {
+  auto t1 = rclcpp::now();
+  auto t0 = rclcpp::Time(odom_out.header.stamp);
+  // Get delta time in seconds
+  const double dt = (t1 - t0).seconds();
+  odom_out.header.stamp = t1;
+  // Initialize heading
+  if (std::isnan(odom_initial_heading))
+    odom_initial_heading = current_heading;
+  if (std::isnan(odom_last_heading))
+    odom_last_heading = current_heading;
+  // Calculate average heading between two updates
+  const double r =
+      (odom_last_heading + current_heading) / 2.f - odom_initial_heading;
+  odom_last_heading = current_heading;
+  // Calculate distance traveled
+  const double dx = odom_out.twist.twist.linear.x * dt;
+  const double dy = odom_out.twist.twist.linear.y * dt;
+  // Calculate new position
+  const double c = cos(r), s = sin(r);
+  odom_out.pose.pose.position.x += dx * c - dy * s;
+  odom_out.pose.pose.position.y += dx * s + dy * c;
 }
 
 BaseDriver::BaseDriver() : Node("Rover_BaseDriver") {
@@ -145,6 +174,8 @@ BaseDriver::BaseDriver() : Node("Rover_BaseDriver") {
   declare_parameter<std::string>("pid", "");
   declare_parameter<std::string>("vid", "");
   declare_parameter<int>("baud", 115200);
+  declare_parameter<double>("k_linear", 1.28);
+  odom_k_linear = get_parameter("k_linear").as_double();
   const int baud = get_parameter("baud").as_int();
   const auto vid = hex_string(get_parameter("vid").as_string());
   const auto pid = hex_string(get_parameter("pid").as_string());
@@ -173,6 +204,10 @@ BaseDriver::BaseDriver() : Node("Rover_BaseDriver") {
   velocity_io.subscribe(this, "base/velocity/set");
   velocity_io.publish(this, "base/velocity/get");
   imu_out.publish(this, "base/imu");
+  odom_out.publish(this, "base/odometry");
+  odom_out.header.frame_id = "odom";
+  odom_out.child_frame_id = "base_footprint";
+  odom_out.header.stamp = rclcpp::now();
   // Timer loop for serial I/O
   timers.push_back(create_timer(50ms, [this]() {
     if (imu_status.query())
