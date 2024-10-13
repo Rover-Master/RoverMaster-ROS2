@@ -204,7 +204,6 @@ BaseDriver::~BaseDriver() {
   RCLCPP_INFO(get_logger(), "Resetting device");
   device->query<MSP::REBOOT>();
   RCLCPP_INFO(get_logger(), "Disconnecting ...");
-  std::this_thread::sleep_for(100ms);
   device = nullptr;
 }
 

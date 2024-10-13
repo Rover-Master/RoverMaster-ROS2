@@ -51,7 +51,11 @@ Device::Device(const std::string path, int baud, bool flush)
   }
 };
 
-Device::~Device() { close(fd); }
+Device::~Device() {
+  flag_term = true;
+  recv_thread.join();
+  close(fd);
+}
 
 void Device::write_and_check(std::vector<uint8_t> &buf, const char *name,
                              uint8_t code) {

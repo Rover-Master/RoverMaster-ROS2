@@ -137,7 +137,7 @@ private:
   std::mutex mutex;
   std::queue<RawPacket::Ptr> queue;
 
-  const std::thread recv_thread;
+  std::thread recv_thread;
   bool flag_term = false;
   NextRawPacket::Ptr next_packet = nullptr;
   const char *preamble = preamble_recv;
