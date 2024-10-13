@@ -1,0 +1,50 @@
+#!/usr/bin/env python3
+import sys, argparse, yaml
+
+parser = argparse.ArgumentParser()
+parser.add_argument("entries", help="entries to filter out", nargs="*")
+args = parser.parse_args()
+entries = set(args.entries)
+
+buffer = ""
+for line in sys.stdin:
+    if line.strip() != "---":
+        buffer += line
+    else:
+        if len(buffer) == 0:
+            continue
+        try:
+            doc = yaml.safe_load(buffer)
+            buffer = ""
+        except yaml.YAMLError as e:
+            print("ERROR: ", e, file=sys.stderr)
+            print(line, end="")
+            buffer = ""
+            continue
+
+        def dictionaries(obj: dict[str, dict]):
+            for item in obj.values():
+                if isinstance(item, dict):
+                    yield item
+
+        for e in entries:
+            levels = e.split(".")
+            path, key = levels[:-1], levels[-1]
+            objects: list[dict[str, dict]] = [doc]
+            for p in path:
+                if p == "*":
+                    objects = list(
+                        item for obj in objects for item in dictionaries(obj)
+                    )
+                else:
+                    objects = list(
+                        obj[p]
+                        for obj in objects
+                        if p in obj and isinstance(obj[p], dict)
+                    )
+            for obj in objects:
+                if key in obj:
+                    del obj[key]
+
+        print(yaml.dump(doc), end="")
+        print(line, end="")

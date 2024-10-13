@@ -1,13 +1,10 @@
 from launch import LaunchDescription
-from launch.actions import ExecuteProcess, RegisterEventHandler, LogInfo
-from launch.event_handlers import OnShutdown
-from launch.events import Shutdown
+from launch.actions import ExecuteProcess, LogInfo
 from launch_ros.actions import Node
-from launch.substitutions import LocalSubstitution
 from os import environ as env
 from pathlib import Path
 from datetime import datetime
-import os, sys, atexit
+import os, atexit
 
 
 run_id = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -69,7 +66,7 @@ nodes = [
         cmd=[
             *["ros2", "bag", "record", "-o", str(RUN_VAR)],
             "/scan_transformed",
-            "/rover/base/velocity/get",
+            "/rover/base/odometry",
             "/rover/base/halt",
         ],
         cwd=str(PWD / "var"),
