@@ -169,7 +169,7 @@ void BaseDriver::integrate_odometry(double current_heading) {
   odom_out.pose.pose.position.y += dx * s + dy * c;
 }
 
-BaseDriver::BaseDriver() : Node("Rover_BaseDriver") {
+BaseDriver::BaseDriver() : Node("base") {
   // Initialize serial connection
   declare_parameter<std::string>("pid", "");
   declare_parameter<std::string>("vid", "");
