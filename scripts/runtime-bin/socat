@@ -1,0 +1,233 @@
+#!/usr/bin/env python3
+# ==============================================================================
+# Author: Yuxuan Zhang (robotics@z-yx.cc)
+# License: MIT
+# ==============================================================================
+import errno, time, sys, os, fcntl
+from socket import socket, AF_UNIX, SOCK_STREAM, error as socket_error
+from pathlib import Path
+
+class DefaultLogger:
+    def info(self, *msg: str):
+        print("[INFO] ", *msg)
+
+    def warn(self, *msg: str):
+        print("[WARN] ", *msg)
+
+    def error(self, *msg: str):
+        print("[ERROR]", *msg, file=sys.stderr)
+
+
+class Readlines:
+    buffer: bytes = b""
+
+    def __call__(self, s: socket):
+        while True:
+            try:
+                byte = s.recv(1)
+                if not byte:
+                    return
+                if byte == b"\n":
+                    yield self.buffer.decode(encoding="utf-8")
+                    self.buffer = b""
+                else:
+                    self.buffer += byte
+            except socket_error as e:
+                err = e.args[0]
+                if err in (errno.EAGAIN, errno.EWOULDBLOCK):
+                    return
+                if err == errno.ECONNRESET:
+                    s.close()
+                    return
+                else:
+                    raise err
+
+
+class Server:
+    def __init__(self, path: Path, logger=DefaultLogger()):
+        self.path = path
+        assert not path.exists(), f"Socket {path} already exists"
+        self.server = socket(AF_UNIX, SOCK_STREAM)
+        self.server.setblocking(False)
+        self.server.bind(str(path))
+        logger.info(f"Socket server listening on unix:{path}")
+        self.clients: list[tuple[socket, Readlines]] = []
+        self.logger = logger
+        self.check_clients()
+
+    def __del__(self):
+        if hasattr(self, "server"):
+            self.server.close()
+        if self.path.exists():
+            self.path.unlink()
+
+    def check_clients(self):
+        # Remove disconnected clients
+        self.clients = [
+            (client, rl) for client, rl in self.clients if client.fileno() != -1
+        ]
+        # Accept all incoming connections
+        while True:
+            try:
+                self.server.listen()
+                client, _ = self.server.accept()
+                client.setblocking(False)
+                self.clients.append((client, Readlines()))
+            except socket_error as e:
+                err = e.args[0]
+                if err == errno.EAGAIN:
+                    break
+                else:
+                    raise e
+
+    def __call__(self, *msgs: str, sep: str = ",", end: str = "\n"):
+        self.check_clients()
+        msg = sep.join(map(str, msgs)) + end
+        for client, _ in self.clients:
+            try:
+                client.sendall(msg.encode())
+            except socket_error as e:
+                err = e.args[0]
+                if err == errno.EAGAIN:
+                    pass
+                else:
+                    self.logger.error(f"Failed to send message: {e}")
+                    client.close()
+
+    def readlines(self):
+        self.check_clients()
+        for client, rl in self.clients:
+            yield from rl(client)
+
+    def __iter__(self):
+        return self.readlines()
+
+    def close(self):
+        self.server.close()
+        self.logger.warn(f"Disconnected from unix:{self.path}")
+
+
+class Client:
+    """
+    A simple Unix socket client that robustly connects to a Unix socket server.
+    It automatically reconnects if the socket is not available or closed.
+    """
+
+    def __init__(self, path: Path, logger=DefaultLogger()):
+        self.path = path
+        self.client = None
+        self.logger = logger
+        self.rl = Readlines()
+
+    report_missing_socket = True
+
+    def check_socket(self):
+        if self.client is not None:
+            return True
+        # Set the path for the Unix socket
+        if not self.path.exists():
+            if self.report_missing_socket:
+                self.logger.info(f"Waiting for socket unix:{self.path}")
+                self.report_missing_socket = False
+            return False
+        self.report_missing_socket = True
+        # Create the Unix socket server
+        self.client = socket(AF_UNIX, SOCK_STREAM)
+        # Set the socket to non-blocking mode
+        self.client.setblocking(False)
+        # Bind the socket to the path
+        self.logger.info(f"Connecting to unix:{self.path}")
+        try:
+            self.client.connect(str(self.path))
+        except socket_error as e:
+            match e.args[0]:
+                case errno.ECONNREFUSED:
+                    self.logger.error(f"Connection refused to unix:{self.path}")
+                case errno.ENOENT:
+                    self.logger.error(f"Socket unix:{self.path} not found")
+                case _:
+                    self.logger.error(f"Failed to connect to unix:{self.path}", e)
+            self.client.close()
+            self.client = None
+            return False
+        self.logger.info(f"Connected to unix:{self.path}")
+        return True
+
+    def reset_socket(self):
+        if self.client is not None:
+            self.client.close()
+        self.client = None
+        self.logger.warn(f"Disconnected from unix:{self.path}")
+
+    def __call__(self, *msgs: str, sep: str = ",", end: str = "\n"):
+        msg = sep.join(map(str, msgs)) + end
+        if not self.check_socket():
+            return
+        try:
+            self.client.sendall(msg.encode())
+        except Exception as e:
+            self.logger.error(f"Failed to send message: {e}")
+            self.reset_socket()
+
+    def readlines(self):
+        """
+        Read socket byte by byte until line feed is encountered, non-blocking.
+        Returns None if no data is available.
+        """
+        if not self.check_socket():
+            return
+        try:
+            yield from self.rl(self.client)
+        except socket_error as e:
+            err = e.args[0]
+            if err in (errno.EAGAIN, errno.EWOULDBLOCK):
+                return
+            else:
+                raise e
+        except Exception:
+            self.reset_socket()
+
+    def __iter__(self):
+        return self.readlines()
+
+
+# Example usage
+if __name__ == "__main__":
+    import argparse
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument("path", type=str, nargs=1)
+    parser.add_argument("--role", default="client", choices=["client", "server"], type=str)
+    args = parser.parse_args()
+    path = Path(args.path[0])
+    role: str = args.role
+
+    # Non-blocking I/O
+    from threading import Thread
+    from queue import Queue, Empty as EmptyQueue
+
+    def reader(q: Queue):
+        for line in sys.stdin:
+            q.put(line)
+
+    q = Queue()
+    t = Thread(target=reader, args=(q,))
+    t.daemon = True
+    t.start()
+
+    s: Server | Client = None
+    if role == "server":
+        s = Server(path)
+    elif role == "client":
+        s = Client(path)
+    else:
+        print("Invalid role", role)
+        sys.exit(1)
+    while True:
+        try:
+            line = q.get_nowait()
+            s(line)
+        except EmptyQueue:
+            pass
+        for line in s:
+            print(line)
