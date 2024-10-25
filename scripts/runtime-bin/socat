@@ -3,7 +3,7 @@
 # Author: Yuxuan Zhang (robotics@z-yx.cc)
 # License: MIT
 # ==============================================================================
-import errno, time, sys, os, fcntl
+import errno, sys
 from socket import socket, AF_UNIX, SOCK_STREAM, error as socket_error
 from pathlib import Path
 
@@ -226,7 +226,7 @@ if __name__ == "__main__":
     while True:
         try:
             line = q.get_nowait()
-            s(line)
+            s(line, end="")
         except EmptyQueue:
             pass
         for line in s:
