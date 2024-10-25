@@ -54,6 +54,10 @@ Device::Device(const std::string path, int baud, bool flush)
 Device::~Device() {
   flag_term = true;
   recv_thread.join();
+  serial::flush(fd);
+  std::this_thread::sleep_for(100ms);
+  tcdrain(fd);
+  std::this_thread::sleep_for(100ms);
   close(fd);
 }
 

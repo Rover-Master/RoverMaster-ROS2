@@ -169,6 +169,49 @@ void BaseDriver::integrate_odometry(double current_heading) {
   odom_out.pose.pose.position.y += dx * s + dy * c;
 }
 
+void BaseDriver::open_device(unsigned max_attempts, bool log) {
+  while (max_attempts > 0) {
+    max_attempts--;
+    device = nullptr;
+    const std::string name = (param.vid.empty() ? "----" : param.vid) + ":" +
+                             (param.pid.empty() ? "----" : param.pid);
+    const auto ports = serial::locate(param.vid, param.pid);
+    if (ports.empty()) {
+      if (log)
+        RCLCPP_WARN(get_logger(), "No serial port found for device %s",
+                    name.c_str());
+      std::this_thread::sleep_for(1000ms);
+      continue;
+    } else if (ports.size() > 1) {
+      if (log)
+        RCLCPP_WARN(get_logger(), "Multiple serial ports found for device %s",
+                    name.c_str());
+    }
+    const auto port = ports[0];
+    if (log)
+      RCLCPP_INFO(get_logger(), "Opening serial port %s (%s:%s), baudrate %d",
+                  port.path.c_str(), port.vid.c_str(), port.pid.c_str(),
+                  param.baud);
+    device = std::make_unique<MultiWii::Device>(port.path, param.baud);
+    // Check connection
+    try {
+      for (unsigned i = 0; i < 10; i++) {
+        device->query<MSP::IDENT>();
+        std::this_thread::sleep_for(50ms);
+      }
+    } catch (const std::exception &e) {
+      if (log)
+        RCLCPP_ERROR(get_logger(), "MSP Device Error: %s", e.what());
+      device = nullptr;
+      std::this_thread::sleep_for(200ms);
+      continue;
+    }
+    break;
+  }
+  if (device == nullptr)
+    throw std::runtime_error("Failed to open serial port");
+}
+
 BaseDriver::BaseDriver() : Node("base") {
   // Initialize serial connection
   declare_parameter<std::string>("pid", "");
@@ -176,22 +219,10 @@ BaseDriver::BaseDriver() : Node("base") {
   declare_parameter<int>("baud", 115200);
   declare_parameter<double>("k_linear", 1.28);
   odom_k_linear = get_parameter("k_linear").as_double();
-  const int baud = get_parameter("baud").as_int();
-  const auto vid = hex_string(get_parameter("vid").as_string());
-  const auto pid = hex_string(get_parameter("pid").as_string());
-  const std::string name =
-      (vid.empty() ? "----" : vid) + ":" + (pid.empty() ? "----" : pid);
-  const auto ports = serial::locate(vid, pid);
-  if (ports.empty()) {
-    throw std::runtime_error("No serial port found for device " + name);
-  } else if (ports.size() > 1) {
-    RCLCPP_WARN(get_logger(), "Multiple serial ports found for device %s",
-                name.c_str());
-  }
-  const auto port = ports[0];
-  RCLCPP_INFO(get_logger(), "Opening serial port %s (%s:%s), baudrate %d",
-              port.path.c_str(), port.vid.c_str(), port.pid.c_str(), baud);
-  device = std::make_unique<MultiWii::Device>(port.path, baud);
+  param.vid = hex_string(get_parameter("vid").as_string());
+  param.pid = hex_string(get_parameter("pid").as_string());
+  param.baud = get_parameter("baud").as_int();
+  open_device();
   // Halt all motors at startup (NEUTRAL)
   halt();
   // Initialize topics
@@ -238,8 +269,9 @@ BaseDriver::~BaseDriver() {
   halt();
   RCLCPP_INFO(get_logger(), "Resetting device");
   device->query<MSP::REBOOT>();
-  RCLCPP_INFO(get_logger(), "Disconnecting ...");
+  std::this_thread::sleep_for(2000ms);
   device = nullptr;
+  RCLCPP_INFO(get_logger(), "Exiting ...");
 }
 
 void BaseDriver::communicate() {

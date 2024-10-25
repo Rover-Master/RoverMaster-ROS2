@@ -10,6 +10,12 @@ private:
   Message<Twist> velocity_io;
   Message<Odometry> odom_out;
   Message<Imu> imu_out;
+  // Configurable parameters
+  struct {
+    std::string vid, pid;
+    int baud;
+  } param;
+  void open_device(unsigned max_attempts = 10, bool log = true);
   // MSP inbound receiver
   MultiWii::Device::Ptr device = nullptr;
   // Timeout since last velocity command to halt motors
