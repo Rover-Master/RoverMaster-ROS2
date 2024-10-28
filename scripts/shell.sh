@@ -29,9 +29,10 @@ source scripts/ros-env.sh
 # Command to find PWD
 CMD_PWD='$('"pwd | sed 's@^${ROS_WS}\?@.@'"')'
 # Rewrite the PS1 prompt to highlight current ROS2 environment
-export PS1="\033[034mROS2::${ROS_DISTRO}\[\033[00m\]"
-export PS1="${PS1} \[\033[04;32m\]$(basename $ROS_WS)\[\033[00m\]"
-export PS1="${PS1} \[\033[96m\]${CMD_PWD}\[\033[00m\] \$ "
+PS_ROS2_DIST='\[\033[034m\]ROS2::'${ROS_DISTRO}'\[\033[00m\]'
+PS_WORKSPACE='\[\033[04;32m\]'$(basename $ROS_WS)'\[\033[00m\]'
+PS_DIRECTORY='\[\033[96m\]'${CMD_PWD}'\[\033[00m\]'
+export PS1="${PS_ROS2_DIST} ${PS_WORKSPACE} ${PS_DIRECTORY} \$ "
 # Function to launch ROS2 manifests in ./launch/
 function launch() {
     LAUNCH=${PROJECT_HOME}/launch
