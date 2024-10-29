@@ -4,7 +4,7 @@ from launch_ros.actions import Node
 from os import environ as env
 from pathlib import Path
 from datetime import datetime
-import os, atexit, subprocess
+import os, sys, atexit, subprocess
 
 RUN_ID = datetime.now().strftime("%Y%m%d_%H%M%S")
 HOME = Path(__file__).resolve().parent.parent
@@ -29,7 +29,7 @@ class Perception(Node):
             executable=executable,
             namespace="perception",
             cwd=str(RUN_DIR),
-            # ros_arguments=["--log-level", "info"],
+            ros_arguments=["--log-level", "info"],
         )
 
 
@@ -97,6 +97,7 @@ LiDAR = Node(
             "angle_compensate": True,
         }
     ],
+    ros_arguments=["--log-level", "warn"],
 )
 
 ScanTransformer = Node(package="lidar_toolbox", executable="scan_transformer")
@@ -121,12 +122,25 @@ def generate_launch_description():
             Camera,
             *perception,
             # ===== SUPPORTIVE NODES =====
-            # LiDAR,
-            # ScanTransformer,
-            # ProximitySwitch,
-            # BagRecorder,
+            LiDAR,
+            ScanTransformer,
+            ProximitySwitch,
+            BagRecorder,
         ]
     )
+
+def confirm(question: str, auto_rej: bool = False) -> bool:
+    while True:
+        dfl = "(n) " if auto_rej else ""
+        match input(f"{question} [Y/n] {dfl}").lower():
+            case "y":
+                return True
+            case "n":
+                return False
+            case "":
+                if auto_rej:
+                    return False
+        print(f"Please respond with 'Y' or 'n'")
 
 
 def shutdown_callback(*args, **kwargs):
@@ -140,7 +154,7 @@ def shutdown_callback(*args, **kwargs):
         # Try to render images
         print("Rendering images ...")
         cmd = [
-            *"python3 -m ros2.threads.renderer".split(),
+            *f"python3 -m ros2.threads.renderer".split(),
             *["--dir", str(RUN_DIR)],
             *["--src", REC],
         ]
@@ -148,25 +162,25 @@ def shutdown_callback(*args, **kwargs):
         print("=" * 60)
         print("(", "cd", DIR, "&&" , " ".join(cmd), ")")
         print("=" * 60)
-        while True:
-            match input("Proceed to render? [Y/n] "):
-                case "Y":
-                    subprocess.Popen(
-                        args=cmd,
-                        cwd=str(HOME / "src" / "perception"),
-                    ).wait()
-                    return
-                case "n":
-                    with open(RUN_DIR / "render.sh", "w") as f:
-                        f.write("cd", DIR)
-                        f.write(" ".join(cmd))
-                    return
-                case _:
-                    print(f"Invalid response")
-    except EOFError:
+        sh = RUN_DIR / "render.sh"
+        with open(sh, "w") as f:
+            f.write(f"cd {DIR.absolute()}\n")
+            f.write(" ".join(cmd))
+        sh.chmod(0o755)
+        if confirm("Render now?"):
+            subprocess.Popen(
+                args=cmd,
+                cwd=str(HOME / "src" / "perception"),
+            ).wait()
+        elif confirm("Delete this run?", auto_rej=True):
+            from shutil import rmtree
+            LATEST.unlink()
+            rmtree(RUN_DIR)
+        else:
+            print(f"Run {sh} to render images later")
+    except OSError:
         pass
     except KeyboardInterrupt:
         pass
-
 
 atexit.register(shutdown_callback)
