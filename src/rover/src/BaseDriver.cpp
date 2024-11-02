@@ -36,7 +36,7 @@ void BaseDriver::halt() {
   odom_out.twist.twist.linear.y = 0;
   odom_out.twist.twist.linear.z = 0;
   integrate_odometry();
-  odom_out();
+  // odom_out();
 }
 
 // Velocity command
@@ -46,7 +46,7 @@ void BaseDriver::motion(double vx, double vy, double vr) {
   integrate_odometry();
   odom_out.twist.twist.linear.x = vx * odom_k_linear;
   odom_out.twist.twist.linear.y = vy * odom_k_linear;
-  odom_out();
+  // odom_out();
   MSP::SET_MOTOR command;
   auto &motor = command.motor;
   clamp(vx, -1.0, 1.0);
