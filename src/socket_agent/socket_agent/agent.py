@@ -5,6 +5,8 @@ from rclpy.impl.rcutils_logger import RcutilsLogger as Logger
 from rosidl_runtime_py.set_message import set_message_fields
 from rosidl_runtime_py.convert import message_to_ordereddict
 from geometry_msgs.msg import Twist
+from sensor_msgs.msg import Imu
+from std_msgs.msg import Bool
 
 # Project local imports
 from .socket import SocketClient
@@ -71,10 +73,8 @@ def launch():
     agent = SocketAgent(SocketClient("/tmp/ros-agent.sock"))
     agent.subscribe("vel/get", Twist)
     agent.publish("vel/set", Twist)
-    agent.subscribe("platform/pos/get", Twist)
-    agent.publish("platform/pos/set", Twist)
-    agent.subscribe("imu/acc", Twist)
-    agent.subscribe("imu/att", Twist)
+    agent.subscribe("imu", Imu)
+    agent.subscribe("halt", Bool)
     try:
         rclpy.spin(agent)
     except KeyboardInterrupt:
