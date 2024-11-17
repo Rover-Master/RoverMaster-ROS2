@@ -48,7 +48,6 @@ void BaseDriver::motion(double vx, double vy, double vr) {
   odom_out.twist.twist.linear.y = vy * odom_k_linear;
   // odom_out();
   MSP::SET_MOTOR command;
-  auto &motor = command.motor;
   clamp(vx, -1.0, 1.0);
   clamp(vy, -1.0, 1.0);
   clamp(vr, -1.0, 1.0);
@@ -71,7 +70,7 @@ void BaseDriver::motion(double vx, double vy, double vr) {
       cmd_vel -= BACKUP_COMP;
     clamp(cmd_vel, DSHOT_NEUTRAL - max_velocity * comb_limit - BACKUP_COMP,
           DSHOT_NEUTRAL + max_velocity * comb_limit);
-    motor[i] = round(cmd_vel);
+    command.motor[i] = round(cmd_vel);
   }
   device->send(command);
 }
