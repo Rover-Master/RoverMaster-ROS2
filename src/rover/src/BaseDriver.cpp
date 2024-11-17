@@ -265,13 +265,13 @@ BaseDriver::BaseDriver() : Node("base") {
 }
 
 BaseDriver::~BaseDriver() {
-  RCLCPP_INFO(get_logger(), "Stopping all motors");
+  // RCLCPP_INFO(get_logger(), "Stopping all motors");
   halt();
-  RCLCPP_INFO(get_logger(), "Resetting device");
+  // RCLCPP_INFO(get_logger(), "Resetting device");
   device->query<MSP::REBOOT>();
   std::this_thread::sleep_for(2000ms);
   device = nullptr;
-  RCLCPP_INFO(get_logger(), "Exiting ...");
+  // RCLCPP_INFO(get_logger(), "Exiting ...");
 }
 
 void BaseDriver::communicate() {

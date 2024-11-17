@@ -129,6 +129,7 @@ def generate_launch_description():
         ]
     )
 
+
 def confirm(question: str, auto_rej: bool = False) -> bool:
     while True:
         dfl = "(n) " if auto_rej else ""
@@ -153,34 +154,46 @@ def shutdown_callback(*args, **kwargs):
                 print(f" - Removed: {socket}")
         # Try to render images
         print("Rendering images ...")
-        cmd = [
-            *f"python3 -m ros2.threads.renderer".split(),
-            *["--dir", str(RUN_DIR)],
+        fig_cmd = [
+            *"python3 -m ros2.utils.look_around".split(),
+            str(RUN_DIR),
+            *["--src", REC],
+        ]
+        vdo_cmd = [
+            *"python3 -m ros2.utils.render".split(),
+            str(RUN_DIR),
             *["--src", REC],
         ]
         DIR = HOME / "src" / "perception"
         print("=" * 60)
-        print("(", "cd", DIR, "&&" , " ".join(cmd), ")")
+        print("(", "cd", DIR, "&&", " ".join(fig_cmd), "&&", " ".join(vdo_cmd), ")")
         print("=" * 60)
         sh = RUN_DIR / "render.sh"
         with open(sh, "w") as f:
             f.write(f"cd {DIR.absolute()}\n")
-            f.write(" ".join(cmd))
+            f.write(" ".join(fig_cmd) + "\n")
+            f.write(" ".join(vdo_cmd) + "\n")
         sh.chmod(0o755)
         if confirm("Render now?"):
             subprocess.Popen(
-                args=cmd,
-                cwd=str(HOME / "src" / "perception"),
+                args=fig_cmd,
+                cwd=str(DIR),
+            ).wait()
+            subprocess.Popen(
+                args=vdo_cmd,
+                cwd=str(DIR),
             ).wait()
         elif confirm("Delete this run?", auto_rej=True):
             from shutil import rmtree
+
             LATEST.unlink()
             rmtree(RUN_DIR)
         else:
-            print(f"Run {sh} to render images later")
+            print(f"Run {sh} to render later")
     except OSError:
         pass
     except KeyboardInterrupt:
         pass
+
 
 atexit.register(shutdown_callback)
