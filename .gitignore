@@ -16,9 +16,12 @@ compile_commands.json
 # Python Runtime Cache
 __pycache__
 
+# Virtual Environment
+.env
+
 # Unix Sockets
 *.socket
 
 # Outputs
-var/
+var
 *.osa
