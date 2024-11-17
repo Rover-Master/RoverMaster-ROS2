@@ -2,4 +2,4 @@
 
 Documentation coming soon ...
 ## Running
-`make launch/rover.xml `
+`make launch/rover`
