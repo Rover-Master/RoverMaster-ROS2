@@ -158,11 +158,13 @@ def shutdown_callback(*args, **kwargs):
             *"python3 -m ros2.utils.look_around".split(),
             str(RUN_DIR),
             *["--src", REC],
+            "-y"
         ]
         vdo_cmd = [
             *"python3 -m ros2.utils.render".split(),
             str(RUN_DIR),
             *["--src", REC],
+            "-y"
         ]
         DIR = HOME / "src" / "perception"
         print("=" * 60)
@@ -174,7 +176,7 @@ def shutdown_callback(*args, **kwargs):
             f.write(" ".join(fig_cmd) + "\n")
             f.write(" ".join(vdo_cmd) + "\n")
         sh.chmod(0o755)
-        if confirm("Render now?"):
+        if confirm("Render now?", auto_rej=True):
             subprocess.Popen(
                 args=fig_cmd,
                 cwd=str(DIR),

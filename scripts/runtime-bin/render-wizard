@@ -1,0 +1,271 @@
+#!/usr/bin/env python3
+from time import sleep
+from sys import exit
+from json import loads
+from subprocess import Popen
+from pathlib import Path
+import curses, signal
+from argparse import ArgumentParser
+
+parser = ArgumentParser()
+parser.add_argument(
+    "-A", "--all", action="store_true", help="Render all runs", default=False
+)
+ALL = bool(parser.parse_args().all)
+
+VAR = Path(__file__).parent.parent.parent / "var"
+
+if not VAR.exists() or not VAR.is_dir():
+    print("Unable to find project var directory")
+    exit(1)
+
+
+def is_run_dir(p: Path):
+    if not p.is_dir() or p.is_symlink():
+        return False
+    try:
+        int(p.name)
+        return True
+    except:
+        return False
+
+
+def duration(t: float | None) -> str:
+    if t is None:
+        return "--:--"
+    return f"{t // 60:02.0f}:{t % 60:02.0f}"
+
+
+class RunInfo:
+    def __init__(self, run_id: str):
+        self.path = VAR / run_id
+        self.run_id = run_id
+
+    def __call__(self, display: curses.window, lineno: int, selected: bool):
+        x = 0
+        rendered = self.rendered
+        pair_id = (selected << 1) + int(rendered == 0b11) + 1
+        color = curses.color_pair(pair_id)
+        rendered_flags = [" | ", " |L", "N| ", "N|L"][rendered]
+        lock_t, lock_d = self.target_lock_duration
+        for i, s in enumerate(
+            [
+                "=> " if selected else "   ",
+                f"[{rendered_flags}]",
+                self.run_id,
+                self.duration,
+                f"{self.look_around_count:02d} look around",
+                f"Target lock since {lock_t} for {lock_d}",
+            ]
+        ):
+            space = curses.COLS - x
+            if space <= 0:
+                break
+            s = f" {s} "[:space]
+            try:
+                display.addstr(lineno, x, s, color)
+                x += len(s)
+                if x + 1 < curses.COLS - 1:
+                    if i > 1:
+                        display.addch(lineno, x, "|", color)
+                        x += 1
+                else:
+                    break
+            except curses.error:
+                break
+
+    @property
+    def rendered(self):
+        N, L = (
+            (VAR / v).exists() for v in (f"{self.run_id}.mp4", f"{self.run_id}_LA.mp4")
+        )
+        return (N << 1) | L
+
+    @property
+    def duration(self) -> str:
+        LIST = self.path / "images.list"
+        if not LIST.exists():
+            return duration(None)
+        with open(LIST) as f:
+            stamps = [float(l.split(",", maxsplit=1)[0]) for l in f]
+        t = stamps[-1] - stamps[0]  # in seconds
+        return duration(t)
+
+    @property
+    def look_around_count(self) -> int:
+        LIST = self.path / "look_around.list"
+        if not LIST.exists():
+            return 0
+        with open(LIST) as f:
+            return sum(line.startswith("=" * 3) for line in f)
+
+    @property
+    def target_lock_duration(self) -> str:
+        LIST = self.path / "navigation.list"
+        if not LIST.exists():
+            return duration(None), duration(None)
+        t0 = None
+        first: float | None = None
+        last: float | None = None
+        durations = list[tuple[float, float]]()
+        with open(LIST) as f:
+            for line in f:
+                try:
+                    arr = loads(f"[{line}]")
+                    if len(arr) != 4:
+                        continue
+                    ts, _, _, msg = arr
+                    assert type(ts) is float
+                    assert type(msg) is str
+                    if t0 is None:
+                        t0 = ts
+                    if msg != "Target Identified":
+                        if None not in (first, last):
+                            d = last - first
+                            durations.append((first - t0, d))
+                        first = last = None
+                    else:
+                        if first is None:
+                            first = ts
+                        last = ts
+                except:
+                    pass
+        durations.sort(key=lambda x: x[1])
+        if len(durations) == 0 or durations[-1][1] < 8.0:
+            s, f = None, None
+        else:
+            s, f = durations[-1]
+        return duration(s), duration(f)
+
+
+def get_info():
+    runs = [P.name for P in VAR.iterdir() if is_run_dir(P)]
+    runs.sort(reverse=True)
+    return [RunInfo(r) for r in runs]
+
+
+def handle_resize(stdscr: curses.window, render: callable):
+    # new_lines, new_cols = stdscr.getmaxyx()
+    stdscr.refresh()
+    render(flush=True)
+
+
+idx, prev_idx, scroll = 0, None, 0
+
+
+def interactive_menu(stdscr: curses.window):
+    curses.curs_set(0)
+    curses.start_color()
+    curses.use_default_colors()
+    if curses.can_change_color():
+        curses.init_color(curses.COLOR_WHITE, 600, 600, 600)  # LIGHT GRAY
+        curses.init_color(curses.COLOR_BLACK, 400, 400, 400)  # DARK GRAY
+        curses.init_color(curses.COLOR_RED, 1000, 0, 0)  # RED
+        curses.init_color(curses.COLOR_GREEN, 0, 500, 0)  # GREEN
+        curses.init_color(curses.COLOR_BLUE, 0, 0, 1000)  # BLUE
+        curses.init_color(curses.COLOR_YELLOW, 1000, 1000, 0)  # Yellow
+        curses.init_color(curses.COLOR_MAGENTA, 600, 500, 0)  # (Orange)
+    curses.init_pair(1 + 0b00, curses.COLOR_YELLOW, -1)
+    curses.init_pair(1 + 0b01, curses.COLOR_WHITE, -1)
+    curses.init_pair(1 + 0b10, curses.COLOR_BLACK, curses.COLOR_YELLOW)
+    curses.init_pair(1 + 0b11, curses.COLOR_BLACK, curses.COLOR_WHITE)
+
+    stdscr.keypad(1)
+    global idx, prev_idx, scroll
+    info = get_info()
+
+    def render(flush=False):
+        global idx, prev_idx, scroll
+        if idx >= len(info):
+            idx = len(info) - 1
+        if idx < scroll:
+            scroll = idx
+            flush = True
+        elif idx >= scroll + curses.LINES:
+            scroll = idx - curses.LINES + 1
+            flush = True
+        if flush:
+            stdscr.clear()
+        # Display menu items
+        for i, row in enumerate(info):
+            if i < scroll:
+                continue
+            elif i >= scroll + curses.LINES:
+                break
+            elif (
+                flush
+                or prev_idx is None
+                or ((i == idx or i == prev_idx) and idx != prev_idx)
+            ):
+                row(stdscr, i - scroll, i == idx)
+        prev_idx = idx
+        stdscr.refresh()
+
+    signal.signal(signal.SIGWINCH, lambda *_: handle_resize(stdscr, render))
+
+    if ALL:
+        for idx, item in enumerate(info):
+            if item.rendered == 0b00:
+                render()
+                sleep(1)
+                return item.run_id, "render"
+        return None, None
+
+    while True:
+        render()
+        key = stdscr.getch()
+        # Navigation
+        if key == curses.KEY_UP and idx > 0:
+            idx -= 1
+        elif key == curses.KEY_DOWN and idx < len(info) - 1:
+            idx += 1
+        elif key == curses.KEY_ENTER or key in [10, 13]:
+            return info[idx].run_id, "render"
+        elif key == ord("d") or key == ord("x"):
+            stdscr.clear()
+            return info[idx].run_id, "delete"
+        elif key == ord("q") or key == 27:
+            stdscr.clear()
+            return None, None
+
+
+def loop(action: callable, *args, **kwargs):
+    while True:
+        yield action(*args, **kwargs)
+
+
+for run, action in loop(curses.wrapper, interactive_menu):
+    prev_idx = None
+    if run is None:
+        break
+    RUN = VAR / run
+    # Render the selected run
+    if action == "render":
+        Popen(["bash", str(VAR / run / "render.sh")]).wait()
+    elif action == "delete":
+        # Print tree structure of the run folder
+        print(RUN, "contains:")
+        for p in RUN.iterdir():
+            if p.is_dir():
+                print("+", p.relative_to(RUN), "(directory)")
+            else:
+                size = p.stat().st_size if p.is_file() else 0
+                for unit in ["B", "KB", "MB", "GB"]:
+                    if size < 1024:
+                        break
+                    size /= 1024
+                size = f"{size:.2f} {unit}"
+                print("-", p.relative_to(RUN), f"({size})")
+        for response in loop(input, f"Delete {VAR / run}? [Y/n] "):
+            print("Your answer:", response)
+            if response.lower()[:1] == "y":
+                Popen(["rm", "-rf", str(VAR / run)]).wait()
+                break
+            elif response.lower()[:1] == "n":
+                break
+            else:
+                print("Invalid response")
+                continue
+    else:
+        print(f"Unknown action: {action}")
+        exit(1)
