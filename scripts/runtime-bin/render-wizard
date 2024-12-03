@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-from time import sleep
 from sys import exit
 from json import loads
 from subprocess import Popen
 from pathlib import Path
 import curses, signal
 from argparse import ArgumentParser
+from functools import cached_property
 
 parser = ArgumentParser()
 parser.add_argument(
@@ -74,14 +74,14 @@ class RunInfo:
             except curses.error:
                 break
 
-    @property
+    @cached_property
     def rendered(self):
         N, L = (
             (VAR / v).exists() for v in (f"{self.run_id}.mp4", f"{self.run_id}_LA.mp4")
         )
         return (N << 1) | L
 
-    @property
+    @cached_property
     def duration(self) -> str:
         LIST = self.path / "images.list"
         if not LIST.exists():
@@ -91,7 +91,7 @@ class RunInfo:
         t = stamps[-1] - stamps[0]  # in seconds
         return duration(t)
 
-    @property
+    @cached_property
     def look_around_count(self) -> int:
         LIST = self.path / "look_around.list"
         if not LIST.exists():
@@ -99,7 +99,7 @@ class RunInfo:
         with open(LIST) as f:
             return sum(line.startswith("=" * 3) for line in f)
 
-    @property
+    @cached_property
     def target_lock_duration(self) -> str:
         LIST = self.path / "navigation.list"
         if not LIST.exists():
@@ -207,7 +207,6 @@ def interactive_menu(stdscr: curses.window):
         for idx, item in enumerate(info):
             if item.rendered == 0b00:
                 render()
-                sleep(1)
                 return item.run_id, "render"
         return None, None
 
