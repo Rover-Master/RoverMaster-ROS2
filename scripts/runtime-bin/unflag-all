@@ -1,0 +1,34 @@
+#/bin/bash
+SELF_PATH=$(dirname $(realpath $0))
+HOME_PATH=$(dirname $(dirname $SELF_PATH))
+
+if [ -z $1 ]; then
+    echo "Usage: $0 <flag>"
+    exit 1
+fi
+
+if [[ $2 = "--dry-run" ]]; then
+    DRY_RUN=true
+else
+    DRY_RUN=false
+fi
+
+# Check if the flag ends with ".flag"
+if [[ $1 != *.flag ]]; then
+    FLAG=$1.flag
+else
+    FLAG=$1
+fi
+
+for d in $(ls $HOME_PATH/var); do
+    FLAG_PATH=$HOME_PATH/var/$d/$FLAG
+    if [ -f $FLAG_PATH ]; then
+        CMD="rm $FLAG_PATH"
+        if [[ $DRY_RUN == false ]]; then
+            echo $CMD;
+            $CMD
+        else
+            echo "# $CMD";
+        fi
+    fi
+done

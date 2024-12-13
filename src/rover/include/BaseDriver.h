@@ -43,7 +43,7 @@ private:
   double odom_initial_heading = NAN;
   double odom_last_heading = NAN;
   void integrate_odometry();
-  void integrate_odometry(double current_heading);
+  void integrate_odometry(const double &current_heading);
 
 public:
   BaseDriver();

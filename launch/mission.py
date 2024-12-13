@@ -15,6 +15,7 @@ RND = "rendering"
 VIDEO_PATH = str(RUN_DIR) + ".mp4"
 
 RUN_DIR.mkdir(parents=True, exist_ok=False)
+
 LATEST = HOME / "var" / "latest"
 if LATEST.exists():
     LATEST.unlink()

@@ -1,19 +1,79 @@
 #!/usr/bin/env python3
+import curses, signal, time
+from os import environ
 from sys import exit
 from json import loads
+from enum import Enum
 from subprocess import Popen
+from contextlib import contextmanager
 from pathlib import Path
-import curses, signal
 from argparse import ArgumentParser
 from functools import cached_property
+
+
+@contextmanager
+def mask(*signum: int, handler: signal.Handlers = signal.SIG_IGN):
+    masked = [(s, signal.signal(s, handler)) for s in signum]
+    try:
+        yield
+    finally:
+        for s, h in masked:
+            signal.signal(s, h)
+
+
+class Action(Enum):
+    NAV = "render-navigation"
+    LAR = "render-look-around"
+    MAP = "slam-mapping"
+    TRJ = "slam-trajectory"
+    DEL = "delete"
+    LST = "list"
+
+
+class Platte:
+    NORM = 0b0000
+    GOOD = 0b0001
+    BAD = 0b0010
+    DIM = 0b0011
+
+    def __init__(self, selected: bool, all_good: bool):
+        self.selected = selected
+        self.all_good = all_good
+
+    def id(self, fg: int):
+        assert fg in (Platte.NORM, Platte.GOOD, Platte.BAD, Platte.DIM)
+        return int((self.selected << 3) + (self.all_good << 2) + fg + 1)
+
+    @property
+    def norm(self):
+        return self[Platte.NORM]
+
+    @property
+    def good(self):
+        return self[Platte.GOOD]
+
+    @property
+    def bad(self):
+        return self[Platte.BAD]
+
+    @property
+    def dim(self):
+        return self[Platte.DIM]
+
+    def __setitem__(self, fg: int, item: tuple[int, int]):
+        return curses.init_pair(self.id(fg), *item)
+
+    def __getitem__(self, fg: int):
+        return curses.color_pair(self.id(fg))
+
 
 parser = ArgumentParser()
 parser.add_argument(
     "-A", "--all", action="store_true", help="Render all runs", default=False
 )
 ALL = bool(parser.parse_args().all)
-
-VAR = Path(__file__).parent.parent.parent / "var"
+HOME = Path(__file__).parent.parent.parent
+VAR = HOME / "var"
 
 if not VAR.exists() or not VAR.is_dir():
     print("Unable to find project var directory")
@@ -36,22 +96,37 @@ def duration(t: float | None) -> str:
     return f"{t // 60:02.0f}:{t % 60:02.0f}"
 
 
+def mix(*items, sep):
+    flag_initial = True
+    for item in items:
+        if not flag_initial:
+            yield sep
+        yield item
+        flag_initial = False
+
+
 class RunInfo:
     def __init__(self, run_id: str):
         self.path = VAR / run_id
         self.run_id = run_id
+        self.rendered = False
 
     def __call__(self, display: curses.window, lineno: int, selected: bool):
         x = 0
-        rendered = self.rendered
-        pair_id = (selected << 1) + int(rendered == 0b11) + 1
-        color = curses.color_pair(pair_id)
-        rendered_flags = [" | ", " |L", "N| ", "N|L"][rendered]
+        p = Platte(selected, all(self.flags))
+        color = p.norm
+        render_indicator = (
+            (f, p.good if _ else p.bad) for f, _ in zip("NLMT", self.flags)
+        )
         lock_t, lock_d = self.target_lock_duration
-        for i, s in enumerate(
+        for i, el in enumerate(
             [
                 "=> " if selected else "   ",
-                f"[{rendered_flags}]",
+                *[
+                    ["[", p.dim],
+                    *mix(*render_indicator, sep=["|", p.dim]),
+                    ["]", p.dim],
+                ],
                 self.run_id,
                 self.duration,
                 f"{self.look_around_count:02d} look around",
@@ -61,25 +136,33 @@ class RunInfo:
             space = curses.COLS - x
             if space <= 0:
                 break
-            s = f" {s} "[:space]
+            if type(el) in (tuple, list):
+                s, c, *_ = list(el) + [color]
+                spacer = False
+            else:
+                s, c = " " + str(el) + " ", color
+                spacer = i > 1
+            s = s[:space]
             try:
-                display.addstr(lineno, x, s, color)
+                display.addstr(lineno, x, s, c)
                 x += len(s)
                 if x + 1 < curses.COLS - 1:
-                    if i > 1:
-                        display.addch(lineno, x, "|", color)
+                    if spacer:
+                        display.addch(lineno, x, "|", p.dim)
                         x += 1
                 else:
                     break
             except curses.error:
                 break
+        self.rendered = True
 
     @cached_property
-    def rendered(self):
-        N, L = (
-            (VAR / v).exists() for v in (f"{self.run_id}.mp4", f"{self.run_id}_LA.mp4")
-        )
-        return (N << 1) | L
+    def flags(self):
+        NAV = VAR / f"{self.run_id}.mp4"
+        LAR = VAR / f"{self.run_id}_LA.mp4"
+        MAP = self.path / "slam" / "MAP_COMPLETE.flag"
+        TRJ = self.path / "slam" / "TRJ_COMPLETE.flag"
+        return list(p.exists() for p in (NAV, LAR, MAP, TRJ))
 
     @cached_property
     def duration(self) -> str:
@@ -141,13 +224,7 @@ class RunInfo:
 def get_info():
     runs = [P.name for P in VAR.iterdir() if is_run_dir(P)]
     runs.sort(reverse=True)
-    return [RunInfo(r) for r in runs]
-
-
-def handle_resize(stdscr: curses.window, render: callable):
-    # new_lines, new_cols = stdscr.getmaxyx()
-    stdscr.refresh()
-    render(flush=True)
+    return list(map(RunInfo, runs))
 
 
 idx, prev_idx, scroll = 0, None, 0
@@ -158,74 +235,130 @@ def interactive_menu(stdscr: curses.window):
     curses.start_color()
     curses.use_default_colors()
     if curses.can_change_color():
-        curses.init_color(curses.COLOR_WHITE, 600, 600, 600)  # LIGHT GRAY
-        curses.init_color(curses.COLOR_BLACK, 400, 400, 400)  # DARK GRAY
+        curses.init_color(curses.COLOR_WHITE, 800, 800, 800)  # LIGHT GRAY
+        curses.init_color(curses.COLOR_BLACK, 100, 100, 100)  # DARK GRAY
         curses.init_color(curses.COLOR_RED, 1000, 0, 0)  # RED
-        curses.init_color(curses.COLOR_GREEN, 0, 500, 0)  # GREEN
+        curses.init_color(curses.COLOR_GREEN, 0, 800, 0)  # GREEN
         curses.init_color(curses.COLOR_BLUE, 0, 0, 1000)  # BLUE
         curses.init_color(curses.COLOR_YELLOW, 1000, 1000, 0)  # Yellow
-        curses.init_color(curses.COLOR_MAGENTA, 600, 500, 0)  # (Orange)
-    curses.init_pair(1 + 0b00, curses.COLOR_YELLOW, -1)
-    curses.init_pair(1 + 0b01, curses.COLOR_WHITE, -1)
-    curses.init_pair(1 + 0b10, curses.COLOR_BLACK, curses.COLOR_YELLOW)
-    curses.init_pair(1 + 0b11, curses.COLOR_BLACK, curses.COLOR_WHITE)
+        curses.init_color(curses.COLOR_MAGENTA, 500, 500, 500)  # (Dim)
+    for sel, all_good in [False, True], [False, False], [True, True], [True, False]:
+        p = Platte(sel, all_good)
+        if sel:
+            fg = curses.COLOR_BLACK
+            bg = curses.COLOR_WHITE if all_good else curses.COLOR_YELLOW
+        else:
+            fg = curses.COLOR_WHITE if all_good else curses.COLOR_YELLOW
+            bg = -1
+        p[Platte.NORM] = (fg, bg)
+        p[Platte.GOOD] = (curses.COLOR_GREEN, bg)
+        p[Platte.BAD] = (curses.COLOR_RED, bg)
+        p[Platte.DIM] = (curses.COLOR_MAGENTA, bg)
 
     stdscr.keypad(1)
+    stdscr.nodelay(1)
     global idx, prev_idx, scroll
     info = get_info()
 
-    def render(flush=False):
+    def flush():
+        stdscr.clear()
+        for i in info:
+            i.rendered = False
+
+    def render():
         global idx, prev_idx, scroll
         if idx >= len(info):
             idx = len(info) - 1
         if idx < scroll:
             scroll = idx
-            flush = True
+            flush()
         elif idx >= scroll + curses.LINES:
             scroll = idx - curses.LINES + 1
-            flush = True
-        if flush:
-            stdscr.clear()
+            flush()
+        # Reset rendered flag for focused/unfocused items
+        if idx != prev_idx:
+            info[idx].rendered = False
+        if prev_idx is not None:
+            info[prev_idx].rendered = False
+        prev_idx = idx
         # Display menu items
         for i, row in enumerate(info):
             if i < scroll:
                 continue
             elif i >= scroll + curses.LINES:
                 break
-            elif (
-                flush
-                or prev_idx is None
-                or ((i == idx or i == prev_idx) and idx != prev_idx)
-            ):
+            elif not row.rendered:
                 row(stdscr, i - scroll, i == idx)
-        prev_idx = idx
-        stdscr.refresh()
-
-    signal.signal(signal.SIGWINCH, lambda *_: handle_resize(stdscr, render))
+            stdscr.refresh()
+            ch = stdscr.getch()
+            if ch != -1:
+                return ch
+        return stdscr.getch()
 
     if ALL:
-        for idx, item in enumerate(info):
-            if item.rendered == 0b00:
-                render()
-                return item.run_id, "render"
-        return None, None
+        try:
+            for idx, item in enumerate(info):
+                if all(item.flags):
+                    continue
+                actions = [
+                    Action.NAV,
+                    Action.LAR,
+                    Action.MAP,
+                    Action.TRJ,
+                ]
+                return item.run_id, *(
+                    action for flag, action in zip(item.flags, actions) if not flag
+                )
+            # All runs are complete, exit
+            return (None,)
+        finally:
+            prev_idx = None
+            stdscr.clear()
 
-    while True:
-        render()
-        key = stdscr.getch()
-        # Navigation
-        if key == curses.KEY_UP and idx > 0:
-            idx -= 1
-        elif key == curses.KEY_DOWN and idx < len(info) - 1:
-            idx += 1
-        elif key == curses.KEY_ENTER or key in [10, 13]:
-            return info[idx].run_id, "render"
-        elif key == ord("d") or key == ord("x"):
+    flag_resize = False
+
+    def handle_resize(sig, frame):
+        nonlocal flag_resize
+        flag_resize = True
+        stdscr.refresh()
+
+    @contextmanager
+    def cleanup():
+        global prev_idx
+        try:
+            yield
+        finally:
+            prev_idx = None
             stdscr.clear()
-            return info[idx].run_id, "delete"
-        elif key == ord("q") or key == 27:
-            stdscr.clear()
-            return None, None
+
+    with cleanup(), mask(signal.SIGWINCH, handler=handle_resize):
+        while True:
+            key = render()
+            flag_resize = False
+            while key < 0 and not flag_resize:
+                time.sleep(1e-3)
+                key = stdscr.getch()
+            if key < 0:
+                continue
+            # Navigation
+            elif key == curses.KEY_UP and idx > 0:
+                idx -= 1
+            elif key == curses.KEY_DOWN and idx < len(info) - 1:
+                idx += 1
+            elif key == ord("n"):
+                return info[idx].run_id, Action.NAV
+            elif key == ord("l"):
+                return info[idx].run_id, Action.LAR
+            elif key == ord("m"):
+                return info[idx].run_id, Action.MAP
+            elif key == ord("t"):
+                return info[idx].run_id, Action.TRJ
+            elif key in (ord("d"), curses.KEY_DC, curses.KEY_BACKSPACE):
+                return info[idx].run_id, Action.DEL
+            elif key in (ord(" "), ord("l")):
+                return info[idx].run_id, Action.LST
+            elif key == ord("q") or key == 27:
+                return (None,)
 
 
 def loop(action: callable, *args, **kwargs):
@@ -233,38 +366,216 @@ def loop(action: callable, *args, **kwargs):
         yield action(*args, **kwargs)
 
 
-for run, action in loop(curses.wrapper, interactive_menu):
-    prev_idx = None
-    if run is None:
-        break
+def confirm(prompt: str, default: bool | None = None):
+    prompt += " [y/n] "
+    if default is True:
+        prompt += "(y) "
+    elif default is False:
+        prompt += "(n) "
+    try:
+        for response in loop(input, prompt):
+            match (response, default):
+                case ("Y", _) | ("y", _):
+                    return True
+                case ("N", _) | ("n", _):
+                    return False
+                case ("", True) | ("", False):
+                    return default
+                case _:
+                    print("Invalid response:", response)
+    except EOFError:
+        print("<EOF>")
+        return default
+
+
+def launch(*args, **kw):
+    with mask(signal.SIGINT):
+        return Popen(["ros2", "launch", *map(str, args)], **kw).wait()
+
+
+class PyModule(dict):
+    def __init__(self, *modules: str, cwd: Path):
+        self["cwd"] = cwd
+        self["modules"] = modules
+
+    def __call__(self, *args, **kw):
+        kw |= {"cwd": self["cwd"]}
+        module = ".".join(self["modules"])
+        cmd = ["python3", "-m", module, *map(str, args)]
+        print("(", "cd", self["cwd"], "&&", *cmd, ")")
+        with mask(signal.SIGINT):
+            return Popen(cmd, **kw).wait()
+
+    def __getattribute__(self, name) -> "PyModule":
+        return PyModule(*self["modules"], name, cwd=self["cwd"])
+
+
+perception = PyModule(cwd=HOME / "src" / "perception")
+
+
+def action_slam_map(run: str):
     RUN = VAR / run
-    # Render the selected run
-    if action == "render":
-        Popen(["bash", str(VAR / run / "render.sh")]).wait()
-    elif action == "delete":
-        # Print tree structure of the run folder
-        print(RUN, "contains:")
-        for p in RUN.iterdir():
-            if p.is_dir():
-                print("+", p.relative_to(RUN), "(directory)")
-            else:
-                size = p.stat().st_size if p.is_file() else 0
-                for unit in ["B", "KB", "MB", "GB"]:
-                    if size < 1024:
-                        break
-                    size /= 1024
-                size = f"{size:.2f} {unit}"
-                print("-", p.relative_to(RUN), f"({size})")
-        for response in loop(input, f"Delete {VAR / run}? [Y/n] "):
-            print("Your answer:", response)
-            if response.lower()[:1] == "y":
-                Popen(["rm", "-rf", str(VAR / run)]).wait()
+    SLAM_COMPLTED_FLAG = RUN / "slam" / "MAP_COMPLETE.flag"
+    env = environ | {"RUN_ID": run, "SLAM_MODE": "MAP"}
+    if SLAM_COMPLTED_FLAG.exists():
+        print(f"[INFO] SLAM mapping already completed for {run}")
+        if confirm(f"Redo mapping for {run}?"):
+            SLAM_COMPLTED_FLAG.unlink()
+    while not SLAM_COMPLTED_FLAG.exists():
+        # Launch mapping
+        launch(HOME / "launch" / "slam.py", env=env)
+        # Check for flag
+        if not SLAM_COMPLTED_FLAG.exists():
+            print(f"[INFO] SLAM mapping not completed for {run}")
+            if not confirm(f"Retry mapping for {run}?"):
                 break
-            elif response.lower()[:1] == "n":
-                break
-            else:
-                print("Invalid response")
+
+
+def action_slam_trj(run: str):
+    RUN = VAR / run
+    SLAM_COMPLTED_FLAG = RUN / "slam" / "MAP_COMPLETE.flag"
+    env = environ | {"RUN_ID": run, "SLAM_MODE": "TRJ"}
+    while not SLAM_COMPLTED_FLAG.exists():
+        print(f"[INFO] SLAM mapping not completed for {run}")
+        if confirm(f"Launch localization for {run}?"):
+            action_slam_map(run, env)
+        else:
+            print(f"[INFO] Localization aborted")
+            return
+    # Launch localization
+    launch(HOME / "launch" / "slam.py", env=env)
+
+
+def iter_with_labels(it):
+    flag_init = True
+    flag_prev = False
+    for current in it:
+        if flag_prev:
+            yield prev, flag_init, False
+            flag_init = False
+        flag_prev = True
+        prev = current
+    if flag_prev:
+        yield prev, flag_init, True
+
+
+class Tree:
+    NODE = "╴"
+    SKIP = "│"
+    BR_MID = "├─"
+    BR_END = "└─"
+
+
+from stat import S_IXUSR
+from termcolor import colored
+
+
+def hsize(size: int) -> str:
+    for unit in ["B", "KB", "MB", "GB"]:
+        if size < 1024:
+            break
+        size /= 1024
+    return f"{size:.2f} {unit}"
+
+
+def tree(p: Path, *levels: bool):
+    indent = "".join("   " if last else Tree.SKIP + "  " for last in levels)
+    image_nodes = list[int]()
+    for item, is_first, is_last in iter_with_labels(sorted(p.iterdir())):
+        BR = Tree.BR_END if is_last else Tree.BR_MID
+        if item.is_dir():
+            name = colored(item.name, "blue")
+        else:
+            stat = item.stat()
+            if item.suffix.lower() in (".png", ".jpg", ".jpeg"):
+                image_nodes.append(stat.st_size)
                 continue
-    else:
-        print(f"Unknown action: {action}")
-        exit(1)
+            name = (
+                colored(item.name, "green") if (stat.st_mode & S_IXUSR) else item.name
+            )
+            name += " " + colored(f"{hsize(stat.st_size)}", "grey")
+        print(indent + BR, Tree.NODE, name, sep="")
+        if item.is_dir():
+            tree(item, *levels, is_last and not len(image_nodes))
+    if len(image_nodes):
+        total_size = sum(image_nodes)
+
+        def light_magenta(s: str, *attrs):
+            return colored(s, "light_magenta", None, attrs=attrs)
+
+        print(
+            indent + Tree.BR_END,
+            Tree.NODE,
+            light_magenta("["),
+            light_magenta(str(len(image_nodes)), "bold"),
+            light_magenta(f" images]"),
+            " ",
+            colored(f"{hsize(total_size)}", "grey"),
+            sep="",
+        )
+
+
+def action_delete_run(run: str):
+    RUN = VAR / run
+    # Print tree structure of the run folder
+    print(colored(RUN, "blue", None, ["bold"]))
+    tree(RUN)
+    # Confirm deletion
+    if confirm(f"Delete {RUN}?"):
+        Popen(["rm", "-rf", str(RUN)]).wait()
+
+
+def action_list_run(run: str):
+    RUN = VAR / run
+
+    # Print tree structure of the run folder
+    def show():
+        div = colored("=" * min(len(str(RUN)), 40), "dark_grey")
+        print("", div, sep="\n")
+        print(colored(RUN, "blue", None, ["bold"]))
+        tree(RUN)
+        print(div, "", sep="\n")
+
+    show()
+    # Interactive bash shell
+    try:
+
+        def throw_eof(signum, frame):
+            raise EOFError
+
+        with mask(signal.SIGINT, handler=throw_eof):
+            while True:
+                cmd = input("bash $ ")
+                if cmd == "exit":
+                    break
+                if cmd.strip().lower() in ("ls", "dir", "tree"):
+                    show()
+                elif len(cmd.strip()):
+                    Popen(["bash", "-c", cmd], cwd=str(RUN)).wait()
+    except EOFError:
+        print("<EOF>")
+        pass
+
+
+if __name__ == "__main__":
+    for run, *actions in loop(curses.wrapper, interactive_menu):
+        if run is None:
+            break
+        RUN = VAR / run
+        for action in actions:
+            match action:
+                case Action.NAV:
+                    perception.ros2.utils.render(VAR / run, "-y")
+                case Action.LAR:
+                    perception.ros2.utils.look_around(VAR / run, "-y")
+                case Action.MAP:
+                    action_slam_map(run)
+                case Action.TRJ:
+                    action_slam_trj(run)
+                case Action.DEL:
+                    action_delete_run(run)
+                case Action.LST:
+                    action_list_run(run)
+                case _:
+                    print(f"Unknown action: {action}")
+                    exit(1)

@@ -1,0 +1,24 @@
+#/bin/bash
+SELF_PATH=$(dirname $(realpath $0))
+HOME_PATH=$(dirname $(dirname $SELF_PATH))
+
+if [ -z $1 ]; then
+    echo "Usage: $0 <flag>"
+    exit 1
+fi
+
+# Check if the flag ends with ".flag"
+if [[ $1 != *.flag ]]; then
+    FLAG=$1.flag
+else
+    FLAG=$1
+fi
+
+for d in $(ls $HOME_PATH/var); do
+    RUN_DIR=$HOME_PATH/var/$d
+    if [ -d $RUN_DIR ]; then
+        FLAG_PATH=$RUN_DIR/$FLAG
+        mkdir -p $(dirname $FLAG_PATH)
+        touch $FLAG_PATH
+    fi
+done
