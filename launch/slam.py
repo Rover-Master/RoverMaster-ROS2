@@ -11,7 +11,6 @@ HOME = Path(__file__).resolve().parent.parent
 RUN_VAR = HOME / "var"
 
 RUN_ID = os.environ.get("RUN_ID", None)
-SLAM_MODE = os.environ.get("SLAM_MODE", "MAP")
 
 if RUN_ID is None:
     print(f"Usage: RUN_ID=<....> launch {SELF}")
@@ -85,23 +84,6 @@ scan_player_params = dict(
 
 SLAM_CONFIG = HOME / "config" / "slam.yaml"
 slam_config: dict = yaml.safe_load(SLAM_CONFIG.read_text())
-
-
-def slam_config_extra(p: Path):
-    slam_config.update(yaml.safe_load(p.read_text()))
-
-
-match SLAM_MODE:
-    case "MAP":
-        scan_player_params["save_map"] = True
-        slam_config_extra(HOME / "config" / "slam_mapping.yaml")
-    case "TRJ":
-        scan_player_params["save_trj"] = True
-        slam_config_extra(HOME / "config" / "slam_localization.yaml")
-    case _:
-        print(f"Error: Invalid SLAM MODE: {SLAM_MODE}")
-        sys.exit(1)
-
 
 print("[INFO] Initial heading:", f"{degrees(init_heading):.2f}", "deg")
 print("[INFO] Heading offset :", f"{degrees(heading_offset):.2f}", "deg")
@@ -227,22 +209,19 @@ def raise_interrupt(signum, frame):
 
 def before_exit():
     signal.signal(signal.SIGINT, raise_interrupt)
-    global heading_offset
-    prev_heading_offset = heading_offset
     try:
-        heading_offset = query_angle(heading_offset, "Update heading offset ({}): ")
+        new_value = query_angle(heading_offset, f"Heading offset ({{}}): ")
     except KeyboardInterrupt:
-        heading_offset = 0.0
+        new_value = 0.0
     print(f"[INFO] Heading offset:", heading_offset)
-    if heading_offset != 0.0:
-        HEADING_OFFSET_FILE.write_text(str(heading_offset))
+    if new_value != 0.0:
+        HEADING_OFFSET_FILE.write_text(str(new_value))
     else:
         HEADING_OFFSET_FILE.unlink(missing_ok=True)
-    # Check if heading offset has been updated
-    if heading_offset != prev_heading_offset:
-        # Invalidate the MAP_COMPLETE flag
+    # Check if value has been updated
+    if new_value != heading_offset:
+        print(heading_offset, "!=", new_value)
         MAP_COMPLETE_FLAG.unlink(missing_ok=True)
 
 
-if SLAM_MODE == "MAP":
-    atexit.register(before_exit)
+atexit.register(before_exit)

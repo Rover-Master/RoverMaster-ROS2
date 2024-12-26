@@ -1,0 +1,53 @@
+#!/usr/bin/env python3
+from argparse import ArgumentParser
+from pathlib import Path
+import cv2
+
+parser = ArgumentParser(description="Convert PNG to PGM")
+parser.add_argument("input", help="Input PNG file", type=str)
+parser.add_argument("output", help="Output PGM file", default=None, nargs="?")
+parser.add_argument("-f", "--force", help="Overwrite output file", action="store_true")
+parser.add_argument("-S", "--scale", help="Scale Ration", type=float, default=None)
+args = parser.parse_args()
+path_in = Path(args.input)
+scale = args.scale
+
+if not path_in.exists():
+    print(f"File not found: {path_in}")
+    exit(1)
+if not path_in.is_file():
+    print(f"Not a file: {path_in}")
+    exit(1)
+
+img_in = cv2.imread(str(path_in), cv2.IMREAD_GRAYSCALE)
+
+if scale is not None:
+    img_in = cv2.resize(
+        img_in,
+        (0, 0),
+        fx=float(scale),
+        fy=float(scale),
+        interpolation=cv2.INTER_NEAREST,
+    )
+
+print(f"Input: {path_in}", "shape:", img_in.shape, "dtype:", img_in.dtype)
+
+assert img_in.ndim == 2, "Input image must be grayscale"
+assert img_in.dtype == "uint8", "Input image must be 8-bit"
+
+PGM = (
+    bytes(f"P5\n{img_in.shape[1]} {img_in.shape[0]}\n255\n", "ascii") + img_in.tobytes()
+)
+
+path_out = args.output or path_in.with_suffix(".pgm")
+force = bool(args.force)
+
+if path_out.exists():
+    if force:
+        print(f"Overwriting: {path_out}")
+    else:
+        print(f"File exists: {path_out}")
+        exit(1)
+
+with open(path_out, "wb") as f:
+    f.write(PGM)

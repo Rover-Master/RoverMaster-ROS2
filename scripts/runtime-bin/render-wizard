@@ -71,7 +71,12 @@ parser = ArgumentParser()
 parser.add_argument(
     "-A", "--all", action="store_true", help="Render all runs", default=False
 )
-ALL = bool(parser.parse_args().all)
+parser.add_argument(
+    "-L", "--list", action="store_true", help="List all runs", default=False
+)
+args = parser.parse_args()
+FLAG_ALL = bool(args.all)
+FLAG_LIST = bool(args.list)
 HOME = Path(__file__).parent.parent.parent
 VAR = HOME / "var"
 
@@ -295,7 +300,7 @@ def interactive_menu(stdscr: curses.window):
                 return ch
         return stdscr.getch()
 
-    if ALL:
+    if FLAG_ALL:
         try:
             for idx, item in enumerate(info):
                 if all(item.flags):
@@ -411,12 +416,13 @@ class PyModule(dict):
 
 
 perception = PyModule(cwd=HOME / "src" / "perception")
+lidar_toolbox = PyModule(cwd=HOME / "src" / "lidar_toolbox")
 
 
 def action_slam_map(run: str):
     RUN = VAR / run
     SLAM_COMPLTED_FLAG = RUN / "slam" / "MAP_COMPLETE.flag"
-    env = environ | {"RUN_ID": run, "SLAM_MODE": "MAP"}
+    env = environ | {"RUN_ID": run}
     if SLAM_COMPLTED_FLAG.exists():
         print(f"[INFO] SLAM mapping already completed for {run}")
         if confirm(f"Redo mapping for {run}?"):
@@ -434,7 +440,7 @@ def action_slam_map(run: str):
 def action_slam_trj(run: str):
     RUN = VAR / run
     SLAM_COMPLTED_FLAG = RUN / "slam" / "MAP_COMPLETE.flag"
-    env = environ | {"RUN_ID": run, "SLAM_MODE": "TRJ"}
+    env = environ | {"RUN_ID": run}
     while not SLAM_COMPLTED_FLAG.exists():
         print(f"[INFO] SLAM mapping not completed for {run}")
         if confirm(f"Launch localization for {run}?"):
@@ -443,7 +449,8 @@ def action_slam_trj(run: str):
             print(f"[INFO] Localization aborted")
             return
     # Launch localization
-    launch(HOME / "launch" / "slam.py", env=env)
+    lidar_toolbox.lidar_toolbox.map_processor(str(RUN / "slam" / "map.yaml"))
+    input("Press enter to exit...")
 
 
 def iter_with_labels(it):
@@ -558,6 +565,19 @@ def action_list_run(run: str):
 
 
 if __name__ == "__main__":
+    if FLAG_LIST:
+        import sys, json
+
+        for info in get_info():
+            msg = dict(
+                duration=info.duration,
+                look_around_count=info.look_around_count,
+                target_lock_duration=info.target_lock_duration,
+                flags=info.flags,
+            )
+            print(info.run_id, json.dumps(msg))
+            sys.stdout.flush()
+        exit(0)
     for run, *actions in loop(curses.wrapper, interactive_menu):
         if run is None:
             break

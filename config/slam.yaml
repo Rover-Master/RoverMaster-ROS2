@@ -13,6 +13,7 @@ map_frame: map
 base_frame: base
 scan_topic: /scan
 
+mode: mapping
 debug_logging: false
 throttle_scans: 1
 transform_publish_period: 0.01 #if 0 never publishes odometry
