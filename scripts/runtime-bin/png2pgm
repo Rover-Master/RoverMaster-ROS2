@@ -5,9 +5,11 @@ import cv2
 
 parser = ArgumentParser(description="Convert PNG to PGM")
 parser.add_argument("input", help="Input PNG file", type=str)
-parser.add_argument("output", help="Output PGM file", default=None, nargs="?")
+parser.add_argument(
+    "output", help="Output PGM file", type=Path, default=None, nargs="?"
+)
 parser.add_argument("-f", "--force", help="Overwrite output file", action="store_true")
-parser.add_argument("-S", "--scale", help="Scale Ration", type=float, default=None)
+parser.add_argument("-s", "--scale", help="Scale Ratio", type=float, default=None)
 args = parser.parse_args()
 path_in = Path(args.input)
 scale = args.scale
@@ -32,7 +34,13 @@ if scale is not None:
 
 print(f"Input: {path_in}", "shape:", img_in.shape, "dtype:", img_in.dtype)
 
-assert img_in.ndim == 2, "Input image must be grayscale"
+
+if img_in.ndim == 3:
+    assert img_in.shape[2] >= 3, f"Input image has {img_in.shape[2]} channels"
+    img_in = cv2.cvtColor(img_in[:, :, :3], cv2.COLOR_BGR2GRAY)
+else:
+    assert img_in.ndim == 2, "Input image must be grayscale"
+
 assert img_in.dtype == "uint8", "Input image must be 8-bit"
 
 PGM = (
