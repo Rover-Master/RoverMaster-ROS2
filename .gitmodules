@@ -14,3 +14,6 @@
 	path = src/lidar_toolbox
 	url = git@github.com:Rover-Master/lidar-toolbox.git
 	branch = master
+[submodule "web"]
+	path = web
+	url = git@github.com:Rover-Master/ZS-NAV-Map-Wizard.git

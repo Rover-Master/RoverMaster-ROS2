@@ -54,6 +54,15 @@ $(LAUNCH_FILES):
 	@ BANNER="Launching $@" $(ROS_ENV) && \
 		ros2 launch $@
 
+# enumurate available launch files (for auto completion)
+RVIZ_CONFIGS:=$(patsubst config/%,%,$(wildcard config/*.rviz))
+$(RVIZ_CONFIGS):
+	@ BANNER="Visualizing $@" $(ROS_ENV) && \
+		ros2 run rviz2 rviz2 \
+			-d config/$@ \
+			--ros-args -p \
+			use_sim_time:=true
+
 sh shell bash:
 	@ clear && bash --rcfile scripts/shell.sh || true
 

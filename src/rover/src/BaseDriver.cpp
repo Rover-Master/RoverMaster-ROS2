@@ -9,6 +9,8 @@
 #include "serial/serial.h"
 #include "util/clamp.h"
 
+#define deg2rad(deg) (static_cast<double>(deg) * 3.1415926 / 180.0)
+
 static const double V[4][3] = {
     // Motor Layout (UP is forward)
     // 4 2
@@ -88,21 +90,14 @@ std::string hex_string(std::string s) {
 // Data handlers
 void BaseDriver::update(MSP::RAW_IMU data,
                         std::chrono::system_clock::time_point timestamp) {
-  data.accX *= 1;
-  data.accY *= -1;
-  data.accZ *= 1;
-  data.gyrX *= 1;
-  data.gyrY *= -1;
-  data.gyrZ *= 1;
   auto &msg = imu_out;
   static const double g = 9.80 / 510.0;
-  msg.linear_acceleration.x = data.accX * g;
-  msg.linear_acceleration.y = data.accY * g;
-  msg.linear_acceleration.z = data.accZ * g;
-  static const double r = 3.1415926 / 180.0;
-  msg.angular_velocity.x = data.gyrX * r;
-  msg.angular_velocity.y = data.gyrY * r;
-  msg.angular_velocity.z = data.gyrZ * r;
+  msg.linear_acceleration.x = data.accX * +g;
+  msg.linear_acceleration.y = data.accY * -g;
+  msg.linear_acceleration.z = data.accZ * +g;
+  msg.angular_velocity.x = +deg2rad(data.gyrX);
+  msg.angular_velocity.y = -deg2rad(data.gyrY);
+  msg.angular_velocity.z = +deg2rad(data.gyrZ);
   odom_out.twist.twist.angular = msg.angular_velocity;
   SET_ROS_STAMP(msg, timestamp);
   imu_status.acc_updated = true;
@@ -112,13 +107,16 @@ void BaseDriver::update(MSP::RAW_IMU data,
   }
 }
 
-#define deg2rad(deg) (static_cast<double>(deg) * 3.1415926 / 180.0)
-// Data handlers
 void BaseDriver::update(MSP::ATTITUDE data,
                         std::chrono::system_clock::time_point timestamp) {
-  const double x = deg2rad(data.angx / 10.0);   // roll
-  const double y = deg2rad(-data.angy / 10.0);  // pitch
-  const double z = deg2rad(data.heading / 1.0); // yaw
+  double x = deg2rad(+data.angx / 10.0);   // roll
+  double y = deg2rad(-data.angy / 10.0);   // pitch
+  double z = deg2rad(+data.heading / 1.0); // yaw
+  // Record initial heading, if not already
+  if (std::isnan(odom_initial_heading))
+    odom_initial_heading = z;
+  // Normalize to -pi to pi
+  z = std::fmod(z - odom_initial_heading, 3.1415926);
   // Convert to quaternion
   const double cx = cos(x / 2), sx = sin(x / 2);
   const double cy = cos(y / 2), sy = sin(y / 2);
@@ -145,21 +143,20 @@ void BaseDriver::integrate_odometry() {
   integrate_odometry(odom_last_heading);
 }
 
-void BaseDriver::integrate_odometry(double current_heading) {
+void BaseDriver::integrate_odometry(const double &current_heading) {
   auto t1 = rclcpp::now();
   auto t0 = rclcpp::Time(odom_out.header.stamp);
   // Get delta time in seconds
   const double dt = (t1 - t0).seconds();
   odom_out.header.stamp = t1;
   // Initialize heading
-  if (std::isnan(odom_initial_heading))
-    odom_initial_heading = current_heading;
-  if (std::isnan(odom_last_heading))
-    odom_last_heading = current_heading;
+  auto &r0 = odom_last_heading;
+  auto &r1 = current_heading;
+  if (std::isnan(r0))
+    r0 = r1;
   // Calculate average heading between two updates
-  const double r =
-      (odom_last_heading + current_heading) / 2.f - odom_initial_heading;
-  odom_last_heading = current_heading;
+  const double r = (r0 + r1) / 2.f;
+  r0 = r1;
   // Calculate distance traveled
   const double dx = odom_out.twist.twist.linear.x * dt;
   const double dy = odom_out.twist.twist.linear.y * dt;

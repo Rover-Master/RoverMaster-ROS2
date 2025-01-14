@@ -1,0 +1,83 @@
+#!/usr/bin/env python3
+from argparse import ArgumentParser
+from pathlib import Path
+from typing import Iterable
+import cv2
+import numpy as np
+
+parser = ArgumentParser(description="Convert PGM toPNG")
+parser.add_argument("input", help="Input PGM file", type=str)
+parser.add_argument(
+    "output", help="Output PNG file", type=Path, default=None, nargs="?"
+)
+parser.add_argument("-f", "--force", help="Overwrite output file", action="store_true")
+parser.add_argument("-s", "--scale", help="Scale Ratio", type=float, default=None)
+parser.add_argument("-t", "--theme", help="Theme", type=str, default="default")
+args = parser.parse_args()
+path_in = Path(args.input)
+theme = str(args.theme)
+scale = args.scale
+
+if not path_in.exists():
+    print(f"File not found: {path_in}")
+    exit(1)
+if not path_in.is_file():
+    print(f"Not a file: {path_in}")
+    exit(1)
+
+
+def repeat(action: callable, *args, **kwargs):
+    while True:
+        yield action(*args, **kwargs)
+
+
+def readline(stream: Iterable[bytes]) -> str:
+    line: bytes = b""
+    for byte in stream:
+        line += byte
+        if byte == b"\n":
+            break
+    return line.decode("utf-8")
+
+
+with path_in.open("rb") as pgm:
+    stream = repeat(pgm.read, 1)
+    assert readline(stream) == "P5\n"
+    (w, h) = [int(i) for i in readline(stream).split()]
+    depth = int(readline(stream))
+    assert depth <= 255, f"Unsupported PGM depth ({depth})"
+    count = w * h
+    buffer = pgm.read(count)
+    img_in = np.frombuffer(buffer, np.uint8, count).reshape((h, w))
+    print(f"Input: {path_in}", "shape:", img_in.shape, "dtype:", img_in.dtype)
+
+A = img_in <= 10
+B = (img_in > 10) & (img_in < 250)
+C = img_in >= 250
+# Apply theme
+img_out = np.zeros((h, w, 4), np.uint8)
+img_out[A] = [0, 0, 0, 128]
+img_out[B] = [192, 192, 192, 128]
+img_out[C] = [255, 255, 255, 255]
+
+if scale is not None:
+    img_out = cv2.resize(
+        img_out,
+        (0, 0),
+        fx=float(scale),
+        fy=float(scale),
+        interpolation=cv2.INTER_NEAREST,
+    )
+
+path_out = args.output or path_in.with_suffix(".png")
+force = bool(args.force)
+
+if path_out.exists():
+    if force:
+        print(f"Overwriting: {path_out}")
+    else:
+        print(f"File exists: {path_out}")
+        exit(1)
+
+with open(path_out, "wb") as f:
+    cv2.imwrite(str(path_out), img_out)

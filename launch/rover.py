@@ -6,8 +6,8 @@ from pathlib import Path
 from datetime import datetime
 
 run_id = datetime.now().strftime("%Y%m%d_%H%M%S")
-PWD = Path(env["PWD"])
-RUN_VAR = PWD / "var" / run_id
+HOME = Path(__file__).resolve().parent.parent
+RUN_VAR = HOME / "var" / run_id
 
 nodes = [
     Node(
@@ -53,7 +53,7 @@ nodes = [
             "/rover/base/odometry",
             "/rover/base/halt",
         ],
-        cwd=str(PWD / "var"),
+        cwd=str(RUN_VAR),
         output="screen",
     ),
 ]
