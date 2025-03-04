@@ -1,7 +1,6 @@
 # Python & rclpy imports
 import rclpy, json, os
 from rclpy.node import Node
-from rclpy.impl.rcutils_logger import RcutilsLogger as Logger
 from rosidl_runtime_py.set_message import set_message_fields
 from rosidl_runtime_py.convert import message_to_ordereddict
 from geometry_msgs.msg import Twist

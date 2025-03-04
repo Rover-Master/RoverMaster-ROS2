@@ -1,6 +1,9 @@
 # This is the git ignore file for ROS2 workspace
 # Author: Yuxuan Zhang
 
+# Runtime assets
+assets
+
 # ROS2 Workspace Produced Files
 build
 install

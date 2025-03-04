@@ -2,3 +2,7 @@
 	path = src/spinnaker_camera
 	url = git@github.com:uf-focus-lab/Spinnaker-Viewer.git
 	branch = master
+[submodule "src/perception"]
+	path = src/perception
+	url = git@github.com:uf-focus-lab/Spinnaker-Viewer.git
+	branch = master
