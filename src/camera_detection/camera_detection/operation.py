@@ -18,22 +18,32 @@ class Operation(Node):
         twist_msg.angular.x = 0.0
         twist_msg.angular.y = 0.0
         twist_msg.angular.z = 0.0
-        # Mapping command strings to Twist message fields
-        if command == "Move Forward":
-            twist_msg.linear.x = 0.2
-        elif command == "Move Backward":
-            twist_msg.linear.x = -0.2
-        elif command == "Turn Left":
-            twist_msg.angular.z = 0.2
-        elif command == "Turn Right":
-            twist_msg.angular.z = -0.2
-        else:
-            self.get_logger().warn(f"Unrecognized command: {command}")
-            return
+        
+        if "Controller:" in command:
+            x_value = float(command.split("x:")[1].split()[0])
+            y_value = float(command.split("y:")[1].split()[0])
+            twist_msg.linear.x = y_value * -1
+            twist_msg.angular.z = x_value * - 1
+        
+        elif "Button Click" in command or "Key Pressed" in command: 
+            x_value = float(command.split("x:")[1].split()[0])
+            y_value = float(command.split("y:")[1].split()[0])
+            # Mapping command strings to Twist message fields
+            if y_value == -1:
+                twist_msg.linear.x = 0.2
+            elif y_value == 1:
+                twist_msg.linear.x = -0.2
+            elif x_value == -1:
+                twist_msg.angular.z = 0.2
+            elif x_value == 1:
+                twist_msg.angular.z = -0.2
+            else:
+                self.get_logger().warn(f"Unrecognized command: {command}")
+                return
         
         # Publish the Twist message
         self.velocity_publisher.publish(twist_msg)
-        self.get_logger().info(f"Publishing velocity command: {command}")
+        self.get_logger().info(f"Publishing velocity command: {twist_msg}")
 
 
 def main():
