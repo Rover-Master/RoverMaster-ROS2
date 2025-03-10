@@ -23,6 +23,7 @@ setup(
           'perception = camera_detection.perception:main',
           'operation = camera_detection.operation:main',
           'stream = camera_detection.stream:main',
+          'server = camera_detection.server:main',
         ],
     },
 )

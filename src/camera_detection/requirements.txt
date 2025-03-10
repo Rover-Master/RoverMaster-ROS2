@@ -2,3 +2,4 @@ torch
 torchvision
 ultralytics
 opencv-python
+numpy<2
