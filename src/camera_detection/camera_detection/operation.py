@@ -22,9 +22,9 @@ class Operation(Node):
         if "Controller:" in command:
             x_value = float(command.split("x:")[1].split()[0])
             y_value = float(command.split("y:")[1].split()[0])
-            twist_msg.linear.x = y_value * -1
-            twist_msg.angular.z = x_value * - 1
-        
+            twist_msg.linear.x = y_value * (- 0.5)
+            twist_msg.angular.z = x_value * (- 0.5
+        )
         elif "Button Click" in command or "Key Pressed" in command: 
             x_value = float(command.split("x:")[1].split()[0])
             y_value = float(command.split("y:")[1].split()[0])
