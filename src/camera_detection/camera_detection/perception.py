@@ -75,6 +75,8 @@ def perception(node: Perception):
         # Process the frame with YOLO
         results: list[Results] = model(frame)  # Perform detection on the frame
         boxes = [frame_id.name]
+        image_id = frame_id.name
+        
         # Print object details
         for result in results:
             if result.boxes is None:
@@ -86,7 +88,7 @@ def perception(node: Perception):
                 confidence = float(box.conf[0])  # Confidence score
                 boxes.append([label, x1, y1, x2, y2, confidence])
 
-        socket.send_all(dumps(boxes) + "\n")
+        socket.send_all(dumps(["image", image_id, boxes]) + "\n")
         while True:
             line = socket.recv_line()
             if line is None:

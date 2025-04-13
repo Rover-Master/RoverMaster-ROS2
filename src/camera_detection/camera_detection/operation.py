@@ -1,14 +1,32 @@
 import rclpy
 from rclpy.node import Node
+from std_msgs.msg import Bool
 from geometry_msgs.msg import Twist
+import time
 
 class Operation(Node):
 
+    override: bool = False
+
     def __init__(self):
+        self.lastupdate = time.time()
         super().__init__("OmnibotOperation")
+        self.operation_override_publisher = self.create_publisher(
+            Bool, "/rover/operation_override", 10
+        )
         self.velocity_publisher = self.create_publisher(
             Twist, "/rover/base/velocity/set", 10
         )
+        self.override_timer = self.create_timer(0.1, self.check_override)
+
+    def check_override(self):
+        if (time.time() - self.lastupdate >= 1.0) and (self.override == True):
+            self.override = False
+            msg = Bool()
+            msg.data = self.override
+            self.operation_override_publisher.publish(msg)
+            self.get_logger().info("Override reset to False after 1 second")
+        
 
     def convert_and_publish(self, command):
         twist_msg = Twist()
@@ -47,6 +65,7 @@ class Operation(Node):
 
 def main():
     from json import dumps, loads
+    from time import sleep
     from .socket import SocketClient
 
     global node
@@ -56,8 +75,17 @@ def main():
     socket = SocketClient("/tmp/omni-control.sock")
     try:
         while True:
+            rclpy.spin_once(node, timeout_sec=0)
             line = socket.recv_line()
+            if line is None:
+                sleep(0.01)
+                continue
             try:
+                node.override = True
+                node.lastupdate = time.time()
+                msg = Bool()
+                msg.data = node.override
+                node.operation_override_publisher.publish(msg)
                 data = loads(line)
                 node.get_logger().info(dumps(data))
                 node.convert_and_publish(data)
