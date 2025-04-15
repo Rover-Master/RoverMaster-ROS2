@@ -51,6 +51,10 @@ nodes = [
         package="camera_detection",
         executable="scanner",
     ),
+    Node(
+        package="camera_detection",
+        executable="server",
+    ),
     DeclareLaunchArgument(
         'channel_type',
         default_value=channel_type,

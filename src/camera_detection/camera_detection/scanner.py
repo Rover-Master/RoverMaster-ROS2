@@ -49,7 +49,7 @@ class Scanner(Node):
         y = pose_msg.pose.pose.orientation.y
         z = pose_msg.pose.pose.orientation.z
         w = pose_msg.pose.pose.orientation.w
-        self._logger.info(f"Orientation (x,y,z,w): ({x}, {y}, {z}, {w})")
+        # self._logger.info(f"Orientation (x,y,z,w): ({x}, {y}, {z}, {w})")
         # Convert to yaw (radians)
         (roll, pitch, yaw) = quat2euler([x, y, z, w])
 
@@ -82,10 +82,10 @@ class Scanner(Node):
 
         front_ranges = list[float]()
 
-        fig, ax = plt.subplots(1, 1)
-        ax.set_xlim(-5, 5)
-        ax.set_ylim(-5, 5)
-        ax.axis('equal')
+        # fig, ax = plt.subplots(1, 1)
+        # ax.set_xlim(-5, 5)
+        # ax.set_ylim(-5, 5)
+        # ax.axis('equal')
 
         scan_points: list[tuple[float, float]] = []
         front_points: list[tuple[float, float]] = []
@@ -111,9 +111,9 @@ class Scanner(Node):
                 front_ranges.append(x)
                 front_points.append((x, y))
     
-        ax.scatter(*zip(*scan_points), s=1, c='black')
-        ax.scatter(*zip(*front_points), s=1, c='red')
-        fig.savefig('scan.jpg')
+        # ax.scatter(*zip(*scan_points), s=1, c='black')
+        # ax.scatter(*zip(*front_points), s=1, c='red')
+        # fig.savefig('scan.jpg')
 
         # if len(front_ranges) > 0:
         #     self.get_logger().info(f"Object Distance: {min(front_ranges):.2f}m")

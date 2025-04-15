@@ -71,11 +71,14 @@ def perception(node: Perception):
             with node.lock:
                 frame = node.frame
                 node.frame = None
-        frame_id = node.save_frame(frame)
+        frame = cv2.resize(frame, None, fx=0.2, fy=0.2)
+        h, w, _ = frame.shape
+        # frame_id = node.save_frame(frame)
         # Process the frame with YOLO
         results: list[Results] = model(frame)  # Perform detection on the frame
-        boxes = [frame_id.name]
-        image_id = frame_id.name
+        # boxes = [frame_id.name]
+        boxes = []
+        # image_id = frame_id.name
         
         # Print object details
         for result in results:
@@ -86,9 +89,9 @@ def perception(node: Perception):
                 # Bounding box coordinates
                 x1, y1, x2, y2, *_ = map(float, box.xyxy[0])
                 confidence = float(box.conf[0])  # Confidence score
-                boxes.append([label, x1, y1, x2, y2, confidence])
+                boxes.append([label, x1 / w, y1 / h, x2 / w, y2 / h, confidence])
 
-        socket.send_all(dumps(["image", image_id, boxes]) + "\n")
+        socket.send_all(dumps(["image", boxes]) + "\n")
         while True:
             line = socket.recv_line()
             if line is None:

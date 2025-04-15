@@ -246,7 +246,7 @@ BaseDriver::BaseDriver() : Node("base") {
       device->query<MSP::ATTITUDE>();
   }));
   timers.push_back(
-      create_timer(2000ms, [this]() { device->query<MSP::ANALOG>(); }));
+      create_timer(10000ms, [this]() { device->query<MSP::ANALOG>(); }));
   // Debounced velocity command
   timers.push_back(create_timer(10ms, [this]() {
     if (velocity_io.updated) {
