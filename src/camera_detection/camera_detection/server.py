@@ -39,9 +39,12 @@ def update_latest_jpg():
 
 class ImageHandler(BaseHTTPRequestHandler):
     def _set_cors_headers(self):
-        self.send_header('Access-Control-Allow-Origin', '*')
+        if "Origin" in self.headers:
+            self.send_header("Access-Control-Allow-Origin", self.headers["Origin"])
+        else:
+            self.send_header("Access-Control-Allow-Origin", "*")
+
         self.send_header('Access-Control-Allow-Methods', 'GET, OPTIONS')
-        self.send_header('Access-Control-Allow-Headers', 'Content-Type')
         self.send_header('Access-Control-Allow-Headers', 'Content-Type, Cache-Control')
     def do_OPTIONS(self):
         self.send_response(200)

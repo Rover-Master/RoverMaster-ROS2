@@ -32,12 +32,14 @@ class Operation(Node):
 
     def move_forward_after_rotation(self, x_value):
         twist_msg = Twist()
-        twist_msg.linear.x = 0.3 * x_value
+        x_value = x_value * 3400000
+        twist_msg.linear.x = x_value
         twist_msg.angular.z = 0.0
-        self.cmd_vel_publisher.publish(twist_msg)
+        self.velocity_publisher.publish(twist_msg)
+        self.get_logger().info(f"Moving forward with x value: {x_value}")
 
-        # Estimate travel time: assume 0.3 m/s
-        travel_time = min(abs(x_value) / 0.3, 5.0)  # cap at 5s
+        # Estimate travel time: assume 0.3 m/ss
+        travel_time = min(abs(x_value) / 0.1, 5.0)  # cap at 5s
         self.get_logger().info(f"Moving forward for {travel_time:.2f}s toward x={x_value}")
 
         # Schedule stop
@@ -48,7 +50,7 @@ class Operation(Node):
         twist_msg = Twist()
         twist_msg.linear.x = 0.0
         twist_msg.angular.z = 0.0
-        self.cmd_vel_publisher.publish(twist_msg)
+        self.velocity_publisher.publish(twist_msg)
         self.get_logger().info("Stopped at target.")
 
     
@@ -101,14 +103,25 @@ class Operation(Node):
                     self.stop_timer.cancel()
 
                 # Step 1: Rotate first (based on Y)
-                if abs(y_value) > 0.05:
+                if abs(y_value) > 0.05:  # Only rotate if the y value is significant
+                    # Calculate rotation speed based on y value
+                    # Keep it constant at 0.3 but preserve direction
+                    rotation_speed = 0.3 if y_value > 0 else -0.3
+                    
+                    # Set rotation command
                     twist_msg.linear.x = 0.0
-                    twist_msg.angular.z = -0.5 * y_value  # rotate direction
-                    self.cmd_vel_publisher.publish(twist_msg)
-
-                    # Estimate rotation time: assume 0.5 rad/s rotation speed
-                    rotation_time = min(abs(y_value) * 1.5, 3.0)  # cap at 3s
-                    self.get_logger().info(f"Rotating for {rotation_time:.2f}s toward y={y_value}")
+                    twist_msg.angular.z = rotation_speed
+                    self.velocity_publisher.publish(twist_msg)
+                    
+                    # Calculate rotation time - using a simple proportion
+                    # The key is to use a much larger multiplier to ensure complete rotation
+                    # Original code used: rotation_time = abs(y_value) * 5
+                    rotation_time = abs(y_value) * 10.0  # Tripled the original time factor
+                    
+                    # Add a minimum to ensure it has time to start rotating
+                    rotation_time = max(rotation_time, 1.5)
+                    
+                    self.get_logger().info(f"Rotating with speed {rotation_speed} for {rotation_time:.2f}s (y={y_value})")
 
                     # After rotation, move forward
                     self.stop_timer = Timer(rotation_time, self.move_forward_after_rotation, [x_value])
@@ -116,7 +129,7 @@ class Operation(Node):
                     return
 
                 # If no rotation needed, go straight immediately
-                if abs(x_value) > 0.05:
+                if abs(x_value * 1000000) > 0.05:
                     self.move_forward_after_rotation(x_value)
 
             except Exception as e:

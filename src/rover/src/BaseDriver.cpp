@@ -285,7 +285,7 @@ void BaseDriver::communicate() {
     if (raw_packet->is<MSP::ANALOG>()) {
       const auto &msg = raw_packet->as<MSP::ANALOG>();
       double volt = static_cast<double>(msg.vbat) * 0.01;
-      RCLCPP_INFO(get_logger(), "Battery voltage: %.2f V", volt);
+      //RCLCPP_INFO(get_logger(), "Battery voltage: %.2f V", volt);
     }
   } catch (const std::exception &e) {
     RCLCPP_ERROR(get_logger(), "MSP Error: %s", e.what());

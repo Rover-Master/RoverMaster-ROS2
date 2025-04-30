@@ -53,19 +53,7 @@ class Scanner(Node):
         # Convert to yaw (radians)
         (roll, pitch, yaw) = quat2euler([x, y, z, w])
 
-        data = {
-            "position": {
-                "x": pose_msg.pose.pose.position.x,
-                "y": pose_msg.pose.pose.position.y,
-                "z": pose_msg.pose.pose.position.z
-            },
-            "orientation": {
-                "quaternion": {"x": x, "y": y, "z": z, "w": w},
-                "euler": {"roll": roll, "pitch": pitch, "yaw": yaw}
-            }
-        }
-
-        self.socket.send_all(dumps(data))
+        self.socket.send_all(dumps(["rotation", {"x": roll, "y": pitch, "z": yaw}]))
 
     def update_override(self, override: Bool):
         self.override = override.data
