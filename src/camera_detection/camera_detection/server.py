@@ -6,10 +6,11 @@ import numpy as np
 from rclpy.node import Node
 from sensor_msgs.msg import Image
 from cv_bridge import CvBridge
-from http.server import HTTPServer, BaseHTTPRequestHandler
+from http.server import HTTPServer, BaseHTTPRequestHandler, ThreadingHTTPServer
 import threading
 import signal
 import sys
+import signal
 
 node: Node
 # Global variable to store the latest image
@@ -36,6 +37,9 @@ def update_latest_jpg():
         last_updated_img_msg = msg
     except Exception as e:
         node.get_logger().error(f'Error processing image: {str(e)}')
+
+class ReusableHTTPServer(ThreadingHTTPServer):
+    allow_reuse_address = True
 
 class ImageHandler(BaseHTTPRequestHandler):
     def _set_cors_headers(self):
@@ -109,24 +113,46 @@ class ImageSubscriberNode(Node):
         
     def launch_server(self, address, port):
         server_address = (address, port)
-        self.httpd = HTTPServer(server_address, ImageHandler)
+        try:
+            self.httpd = ReusableHTTPServer(server_address, ImageHandler)
+        except OSError as e:
+            self.get_logger().error(f"Cannot start HTTP server on {port}: {e}")
+            return
         self.httpd.serve_forever()
         
     def image_callback(self, msg: Image):
         global latest_img_msg
         latest_img_msg = msg
 
+
+    def shutdown_http_server(self):
+        if self.httpd:
+            self.get_logger().info(f"Shutting down HTTP server on port {self.port}")
+            self.httpd.shutdown()
+
+
 def main(args=None):
     rclpy.init(args=args)    
     # Create the node
     global node
     node = ImageSubscriberNode()
+
+    # Register signal handlers for graceful shutdown
+    def shutdown_http_server(signum, frame):
+        node.get_logger().info('Shutting down HTTP server…')
+        node.httpd.shutdown()
+        rclpy.shutdown()
+
+    signal.signal(signal.SIGINT,  shutdown_http_server)
+    signal.signal(signal.SIGTERM, shutdown_http_server)
+
     try:
         # Spin the node
         rclpy.spin(node)
     except KeyboardInterrupt:
         pass
     # Clean up
+    rclpy.shutdown(node)
     node.destroy_node()
 
 if __name__ == '__main__':
