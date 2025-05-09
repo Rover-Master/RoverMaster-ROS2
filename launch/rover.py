@@ -8,6 +8,7 @@ from datetime import datetime
 run_id = datetime.now().strftime("%Y%m%d_%H%M%S")
 HOME = Path(__file__).resolve().parent.parent
 RUN_VAR = HOME / "var" / run_id
+RUN_VAR.mkdir(parents=True, exist_ok=False)
 
 nodes = [
     Node(
@@ -48,7 +49,7 @@ nodes = [
     Node(package="lidar_toolbox", executable="proximity", output="screen"),
     ExecuteProcess(
         cmd=[
-            *["ros2", "bag", "record", "-o", str(RUN_VAR)],
+            *["ros2", "bag", "record", "-o", str(RUN_VAR / "bag")],
             "/scan_transformed",
             "/rover/base/odometry",
             "/rover/base/halt",

@@ -9,7 +9,27 @@
 #include "serial/serial.h"
 #include "util/clamp.h"
 
-#define deg2rad(deg) (static_cast<double>(deg) * 3.1415926 / 180.0)
+static const double DEG2RAD = M_PI / 180.0;
+static const double RAD2DEG = 180.0 / M_PI;
+#define deg2rad(deg) (static_cast<double>(deg) * DEG2RAD)
+#define rad2deg(rad) (static_cast<double>(rad) * RAD2DEG)
+
+template <typename T> static inline auto periodic(const T &v, const T &p) {
+  const auto res = std::fmod(v, p);
+  const auto p2 = p / 2;
+  if (res > +p2)
+    return res - p;
+  if (res < -p2)
+    return res + p;
+  return res;
+}
+
+static inline auto radians(const double &deg) {
+  return periodic(deg2rad(deg), 2 * M_PI);
+}
+static inline auto degrees(const double &rad) {
+  return periodic(rad2deg(rad), 360.0);
+}
 
 static const double V[4][3] = {
     // Motor Layout (UP is forward)
@@ -109,14 +129,14 @@ void BaseDriver::update(MSP::RAW_IMU data,
 
 void BaseDriver::update(MSP::ATTITUDE data,
                         std::chrono::system_clock::time_point timestamp) {
-  double x = deg2rad(+data.angx / 10.0);   // roll
-  double y = deg2rad(-data.angy / 10.0);   // pitch
-  double z = deg2rad(+data.heading / 1.0); // yaw
+  double x = radians(+data.angx / 10.0);   // roll
+  double y = radians(-data.angy / 10.0);   // pitch
+  double z = radians(+data.heading / 1.0); // yaw
   // Record initial heading, if not already
   if (std::isnan(odom_initial_heading))
     odom_initial_heading = z;
-  // Normalize to -pi to pi
-  z = std::fmod(z - odom_initial_heading, 3.1415926);
+  else
+    z = periodic(z - odom_initial_heading, 2 * M_PI);
   // Convert to quaternion
   const double cx = cos(x / 2), sx = sin(x / 2);
   const double cy = cos(y / 2), sy = sin(y / 2);
@@ -244,7 +264,7 @@ BaseDriver::BaseDriver() : Node("base") {
       device->query<MSP::ATTITUDE>();
   }));
   timers.push_back(
-      create_timer(2000ms, [this]() { device->query<MSP::ANALOG>(); }));
+      create_timer(10s, [this]() { device->query<MSP::ANALOG>(); }));
   // Debounced velocity command
   timers.push_back(create_timer(10ms, [this]() {
     if (velocity_io.updated) {
