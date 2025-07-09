@@ -38,6 +38,7 @@ class Perception(Node):
 
     def onCameraFrame(self, msg):
         frame = self.br.imgmsg_to_cv2(msg)
+        frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
         with self.lock:
             self.frame = frame
             # self.save_frame(frame)
@@ -46,7 +47,7 @@ class Perception(Node):
     def save_frame(self, frame: np.ndarray):
         filename = VAR / f"frame_{self.frame_index:04d}.jpg"
         self.frame_index += 1  # Increment the frame counter
-        frame = cv2.resize(frame, None, fx=0.2, fy=0.2)
+        # frame = cv2.resize(frame, None, fx=0.2, fy=0.2)
         cv2.imwrite(str(filename), frame)  # Save the frame as an image file
         return filename
 
@@ -56,7 +57,7 @@ def perception(node: Perception):
     from ultralytics.engine.results import Results
     from .socket import SocketClient
 
-    model = YOLO(ASSETS / "yolo11n.pt")
+    model = YOLO("/data/yolo11s-egg.pt")
     socket = SocketClient("/tmp/omni-control.sock")
 
     if socket.check_socket():

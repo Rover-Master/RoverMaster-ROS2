@@ -92,7 +92,7 @@ class ImageSubscriberNode(Node):
         super().__init__('image_subscriber')
         self.subscription = self.create_subscription(
             Image,
-            '/capture/camera_0/img',  
+            'img',
             self.image_callback,
             10
         )

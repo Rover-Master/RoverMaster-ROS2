@@ -50,7 +50,7 @@ class SocketClient:
                 case errno.ENOENT:
                     self.logger.error(f"Socket unix:{self.path} not found")
                 case _:
-                    self.logger.error(f"Failed to connect to unix:{self.path}", e)
+                    self.logger.error(f"Failed to connect to unix:{self.path}")
             self.client.close()
             self.client = None
             return False

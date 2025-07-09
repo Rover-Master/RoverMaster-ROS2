@@ -3,3 +3,4 @@ torchvision
 ultralytics
 opencv-python
 transform3d
+numpy==1.26.4
