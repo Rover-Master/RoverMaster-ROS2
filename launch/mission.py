@@ -21,20 +21,20 @@ nodes = [
             {"pid": "x5740"},
         ],
     ),
-    # Node(
-    #     package="realsense2_camera",
-    #     executable="realsense2_camera_node",
-    #     namespace="rover",
-    #     name="camera",
-    # ),
-    # Node(
-    #     package="camera_detection",
-    #     executable="perception",
-    #     namespace="capture",
-    #     remappings=[
-    #         ("img", "/rover/camera/color/image_raw")
-    #     ],
-    # ),
+    Node(
+        package="realsense2_camera",
+        executable="realsense2_camera_node",
+        namespace="rover",
+        name="camera",
+    ),
+    Node(
+        package="camera_detection",
+        executable="perception",
+        namespace="capture",
+        remappings=[
+            ("img", "/rover/camera/color/image_raw")
+        ],
+    ),
     # Node(
     #     package="camera_detection",
     #     executable="operation",

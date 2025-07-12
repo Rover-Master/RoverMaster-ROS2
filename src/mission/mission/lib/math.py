@@ -15,7 +15,7 @@ def sign(value: float) -> int:
         return 0
 
 
-def clamp(min: float, max: float) -> float:
+def clamp(min: float, max: float):
     """lambda function to clamp a value between min and max"""
     assert min <= max
 

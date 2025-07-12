@@ -2,11 +2,11 @@ import numpy as np
 import os
 import rclpy
 from rclpy.node import Node
+from std_msgs.msg import String
 from sensor_msgs.msg import Image
-from geometry_msgs.msg import Twist
 from cv_bridge import CvBridge
 from pathlib import Path
-from threading import Thread, Lock
+from threading import Thread
 import cv2
 
 # Set up directories
@@ -18,85 +18,58 @@ ASSETS.mkdir(parents=True, exist_ok=True)
 
 
 class Perception(Node):
-    lock: Lock
     frame: np.ndarray | None = None
     flag_term: bool = False
 
     def __init__(self):
-        super().__init__("camera_detection_node")
-        self.lock = Lock()
+        super().__init__("detection")
         self.br = CvBridge()
-        self.frame_index = 0
+        self.img_sub = self.create_subscription(Image, "img", self.onFrame, 10)
+        self.det_pub = self.create_publisher(String, "/detection", 10)
 
-        self.subscription = self.create_subscription(
-            Image, "img", self.onCameraFrame, 10
-        )
-
-        self.velocity_publisher = self.create_publisher(
-            Twist, "/rover/base/velocity/set", 10
-        )
-
-    def onCameraFrame(self, msg):
+    def onFrame(self, msg):
         frame = self.br.imgmsg_to_cv2(msg)
         frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
-        with self.lock:
-            self.frame = frame
-            # self.save_frame(frame)
+        self.frame = frame
 
-
-    def save_frame(self, frame: np.ndarray):
-        filename = VAR / f"frame_{self.frame_index:04d}.jpg"
-        self.frame_index += 1  # Increment the frame counter
-        # frame = cv2.resize(frame, None, fx=0.2, fy=0.2)
-        cv2.imwrite(str(filename), frame)  # Save the frame as an image file
-        return filename
 
 def perception(node: Perception):
+    from time import sleep
     from json import dumps
     from ultralytics import YOLO
     from ultralytics.engine.results import Results
-    from .socket import SocketClient
 
     model = YOLO("/data/yolo11s-egg.pt")
-    socket = SocketClient("/tmp/omni-control.sock")
-
-    if socket.check_socket():
-        node.get_logger().info("Socket is connected successfully.")
-    else:
-        node.get_logger().warn("Failed to connect to the socket.")
-
     # Load the YOLO model
+    prev_frame: np.ndarray | None = None
     while not node.flag_term:
-        frame: np.ndarray | None = None
-        while frame is None:
-            with node.lock:
-                frame = node.frame
-                node.frame = None
-        frame = cv2.resize(frame, None, fx=0.2, fy=0.2)
+        next_frame = node.frame
+        if next_frame is None or (next_frame is prev_frame):
+            sleep(0.01)
+            continue
+
+        cv2.imwrite(VAR / "frame.jpg", next_frame)
+        frame = cv2.resize(next_frame, None, fx=0.2, fy=0.2)
         h, w, _ = frame.shape
-        # frame_id = node.save_frame(frame)
-        # Process the frame with YOLO
-        results: list[Results] = model(frame)  # Perform detection on the frame
-        # boxes = [frame_id.name]
-        boxes = []
-        # image_id = frame_id.name
-        
+        # Perform detection on the frame
+        results: list[Results] = model(frame, conf=0.5)
+        detections = []
         # Print object details
         for result in results:
             if result.boxes is None:
                 continue
             for box in result.boxes:
-                label = str(result.names[box.cls[0].item()])  # Object label
+                id = int(box.cls[0])
                 # Bounding box coordinates
                 x1, y1, x2, y2, *_ = map(float, box.xyxy[0])
                 confidence = float(box.conf[0])  # Confidence score
-                boxes.append([label, x1 / w, y1 / h, x2 / w, y2 / h, confidence])
+                cx = (x1 + x2) / (2 * w)
+                cy = (y1 + y2) / (2 * h)
+                detections.append([id, cx, cy, confidence])
 
-        socket.send_all(dumps(["image", boxes]) + "\n")
-        while True:
-            line = socket.recv_line()
-            if line is None:
-                break
+        msg = String()
+        msg.data = dumps(detections)
+        node.det_pub.publish(msg)
 
 
 def main():
