@@ -17,3 +17,6 @@
 [submodule "web"]
 	path = web
 	url = git@github.com:Rover-Master/ZS-NAV-Map-Wizard.git
+[submodule "src/simulator"]
+	path = src/simulator
+	url = git@github.com:OpenRover/habitat-sim-ros2.git
