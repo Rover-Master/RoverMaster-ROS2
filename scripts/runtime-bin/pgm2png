@@ -57,7 +57,7 @@ C = img_in >= 250
 # Apply theme
 img_out = np.zeros((h, w, 4), np.uint8)
 img_out[A] = [0, 0, 0, 128]
-img_out[B] = [192, 192, 192, 128]
+img_out[B] = [192, 192, 192, 0]
 img_out[C] = [255, 255, 255, 255]
 
 if scale is not None:
