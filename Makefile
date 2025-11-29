@@ -35,9 +35,8 @@ $(PACKAGES): build/deps
 	$(eval PACKAGE=$(shell basename $@))
 	$(eval CMD=$(BUILD) --cmake-args $(CMAKE_ARGS) --packages-select $(PACKAGE))
 	$(info $(CMD))
-	@ $(CLR_ENV) \
-	  && NONLOCAL=1 BANNER="Building $(PACKAGE)" $(ROS_ENV) && \
-	  $(CMD); scripts/compile_commands.py
+	@ NONLOCAL=1 BANNER="Building $(PACKAGE)" $(ROS_ENV) && \
+	  $(CMD); scripts/compiledb.py
 
 PACKAGES_LN:=$(addsuffix /symlink, $(PACKAGES))
 $(PACKAGES_LN): BUILD += --symlink-install
@@ -46,7 +45,7 @@ $(PACKAGES_LN): build/deps
 	$(eval CMD=$(BUILD) --cmake-args $(CMAKE_ARGS) --packages-select $(PACKAGE))
 	$(info $(CMD))
 	@ NONLOCAL=1 BANNER="Building $(PACKAGE)" $(ROS_ENV) && \
-	  $(CMD); scripts/compile_commands.py
+	  $(CMD); scripts/compiledb.py
 
 # enumurate available launch files (for auto completion)
 LAUNCH_FILES:=$(wildcard launch/*)
