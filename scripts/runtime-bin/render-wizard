@@ -174,10 +174,13 @@ class RunInfo:
         LIST = self.path / "images.list"
         if not LIST.exists():
             return duration(None)
-        with open(LIST) as f:
-            stamps = [float(l.split(",", maxsplit=1)[0]) for l in f]
-        t = stamps[-1] - stamps[0]  # in seconds
-        return duration(t)
+        try:
+            with open(LIST) as f:
+                stamps = [float(l.split(",", maxsplit=1)[0]) for l in f]
+            t = stamps[-1] - stamps[0]  # in seconds
+            return duration(t)
+        except:
+            return duration(None)
 
     @cached_property
     def look_around_count(self) -> int:
